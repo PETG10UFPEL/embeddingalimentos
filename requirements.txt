@@ -1,0 +1,16 @@
+streamlit
+python-dotenv
+numpy==1.26.4
+pydantic
+chromadb
+langchain
+langchain-community
+langchain-text-splitters
+langchain-openai
+pypdf
+python-docx
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
+tiktoken
