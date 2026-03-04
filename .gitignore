@@ -28,3 +28,5 @@ Thumbs.db
 # Data (não versionar base + docs do paciente)
 data/raw_docs/
 data/chroma_db/
+
+.env
