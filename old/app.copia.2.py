@@ -45,18 +45,20 @@ st.markdown("""
     margin-top: 0.8rem;
     color: #1a1a2e;
   }
-
-  .info-text {
-    font-size: 1.0rem;      /* equivalente a ~12pt no Word */
-    line-height: 1.6;
-    color: #222;
-    margin: 0.3rem 0;
-  }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================
-# Helpers de imagem
+# Banner
+# ==============================
+banner_path = Path(__file__).parent / "assets" / "banner.png"
+if banner_path.exists():
+    st.image(str(banner_path), use_container_width=True)
+else:
+    st.title("🥗 Planejador de Dieta - Patrícia")
+
+# ==============================
+# Links institucionais
 # ==============================
 def img_b64(filename: str) -> str:
     p = Path(__file__).parent / "assets" / filename
@@ -64,23 +66,6 @@ def img_b64(filename: str) -> str:
         return base64.b64encode(p.read_bytes()).decode()
     return ""
 
-# ==============================
-# Banner — 40% da largura, centralizado
-# ==============================
-banner_b64 = img_b64("banner.png")
-if banner_b64:
-    st.markdown(f"""
-    <div style="display:flex; justify-content:center; margin-bottom:8px;">
-      <img src="data:image/png;base64,{banner_b64}"
-           style="width:40%; height:auto; border-radius:6px;">
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.title("🥗 Planejador de Dieta - Patrícia")
-
-# ==============================
-# Links institucionais
-# ==============================
 insta_b64 = img_b64("instagram.png")
 enf_b64   = img_b64("logo.enfermagem.png")
 
@@ -104,66 +89,15 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==============================
-# Assinatura — tamanho ~12pt
+# Assinatura
 # ==============================
-st.markdown("""
-<p class="info-text" style="margin-bottom:0.8rem;">
-  <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
-  Disciplina 15001103 M1 &mdash; Princípios de Inteligência Artificial Aplicados &middot;
-  UFPel (2025/6-2) &middot; Prof. Alejandro Martins R. &middot;
-  Sistema elaborado em parceria junto à P&amp;D do Projeto PET UFPel Saúde Digital &mdash;
-  Telemonitoramento de Feridas Crônicas.
-</p>
-""", unsafe_allow_html=True)
-
-# ==============================
-# Texto explicativo RAG + link embeddings
-# ==============================
-
-def _html_com_imagens_embutidas(html_path: Path) -> str:
-    """Lê o HTML e substitui src de imagens locais por base64."""
-    import re
-    html = html_path.read_text(encoding="utf-8", errors="replace")
-    assets_dir = html_path.parent
-
-    def substituir(match):
-        src = match.group(1)
-        # só processa caminhos relativos (não http)
-        if src.startswith("http"):
-            return match.group(0)
-        img_path = assets_dir / src
-        if img_path.exists():
-            mime = "image/png" if src.lower().endswith(".png") else "image/jpeg"
-            b64 = base64.b64encode(img_path.read_bytes()).decode()
-            return f'src="data:{mime};base64,{b64}"'
-        return match.group(0)
-
-    html = re.sub(r'src="([^"]+)"', substituir, html)
-    return html
-
-st.markdown("""
-<p class="info-text" style="margin-top:0.8rem;">
-  <strong>Retrieval-Augmented Generation (RAG-AI)</strong> melhora a precisão dos modelos de linguagem (LLMs)
-  ao recuperar dados externos — como documentos e bases de dados — para responder perguntas,
-  reduzindo as chamadas alucinações.
-</p>
-<p class="info-text" style="margin-top:0.2rem;">
-  <strong>Embeddings</strong> são representações numéricas (vetores) de textos que capturam seu significado
-  semântico, permitindo que a IA encontre informações relevantes por similaridade de sentido,
-  e não apenas por palavras-chave.
-</p>
-<p class="info-text" style="margin-top:0.2rem;">
-  Quer visualizar a representação gráfica do conhecimento?
-</p>
-""", unsafe_allow_html=True)
-
-_emb_path = Path(__file__).parent / "assets" / "embeddings_alimentos.html"
-if _emb_path.exists():
-    with st.expander("📊 Ver Embeddings dos Alimentos", expanded=False):
-        _html_content = _html_com_imagens_embutidas(_emb_path)
-        components.html(_html_content, height=700, scrolling=True)
-else:
-    st.caption("_(arquivo embeddings_alimentos.html não encontrado em assets/)_")
+st.caption(
+    "**Patrícia Xavier Bittencourt**, estudante · "
+    "Disciplina 15001103 M1 — Princípios de Inteligência Artificial Aplicados · UFPel (2025/6-2) · "
+    "Prof. Alejandro Martins R. · "
+    "Sistema elaborado em parceria junto à P&D do Projeto PET UFPel Saúde Digital — "
+    "Telemonitoramento de Feridas Crônicas."
+)
 
 st.divider()
 
@@ -189,7 +123,7 @@ with st.sidebar:
 # Componente de voz (reutilizável)
 # ==============================
 def mic_component(target_label: str, field_index: int):
-    """Injeta botão de microfone que preenche o textarea pelo índice."""
+    """Injeta botão de microfone que preenche o textarea pelo aria-label ou por índice."""
     key = f"mic_{field_index}"
     components.html(f"""
     <style>
@@ -206,7 +140,7 @@ def mic_component(target_label: str, field_index: int):
         0%,100%{{box-shadow:0 0 0 0 rgba(229,57,53,.35);}}
         50%{{box-shadow:0 0 0 8px rgba(229,57,53,0);}}
       }}
-      #micStatus_{key} {{ font-size:.80rem; color:#555; }}
+      #micStatus {{ font-size:.80rem; color:#555; }}
     </style>
     <div class="mic-row">
       <button class="mic-btn" id="micBtn_{key}" title="Falar">🎤</button>

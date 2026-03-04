@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Embeddings para Nutrição</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+    font-family: 'Inter', sans-serif;
+    background: #f3f7fb;
+    color: #0f172a;
+    padding: 30px 20px;
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* HEADER */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .header .tag {
+    display: inline-block;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 18px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+  .header h1 {
+    font-size: 42px;
+    font-weight: 900;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #22c55e, #86efac, #ffffff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header h1 span {
+    background: linear-gradient(135deg, #facc15, #f97316);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+    .header p {
+    color: #475569;
+    font-size: 16px;
+    margin-top: 10px;
+  }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #22c55e;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, #22c55e33, transparent);
+  }
+
+  /* CARD BASE */
+    .card {
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  }
+
+  /* WHAT IS EMBEDDING */
+  .analogy-box {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
+  }
+    .analogy-side {
+    background: #f1f5f9;
+    border: 1px solid #dbe5f0;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .analogy-side .emoji { font-size: 32px; margin-bottom: 8px; }
+  .analogy-side .label { font-size: 13px; color: #475569; margin-bottom: 4px; }
+  .analogy-side .value { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .arrow-mid { text-align: center; font-size: 28px; color: #22c55e; }
+
+  /* VECTOR VISUALIZATION */
+  .word-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .word-label {
+    font-weight: 700;
+    font-size: 14px;
+    min-width: 170px;
+    color: #0f172a;
+  }
+    .vec-cell {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: monospace;
+    color: #15803d;
+    min-width: 50px;
+    text-align: center;
+  }
+    .vec-cell.neg { color: #b91c1c; }
+    .vec-cell.highlight { border-color: #22c55e; background: #dcfce7; }
+  .dim-label {
+    font-size: 10px;
+    color: #475569;
+    text-align: center;
+    min-width: 50px;
+  }
+
+  /* PIPELINE */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding: 10px 0;
+  }
+    .pipe-step {
+    flex: 1;
+    min-width: 120px;
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+    position: relative;
+  }
+  .pipe-step + .pipe-step {
+    margin-left: 10px;
+  }
+  .pipe-step::after {
+    content: '→';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    color: #22c55e;
+    z-index: 2;
+  }
+  .pipe-step:last-child::after { display: none; }
+  .pipe-icon { font-size: 28px; margin-bottom: 8px; }
+  .pipe-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .pipe-desc {
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+  .pipe-step.highlight-step {
+    background: #14301e;
+    border-color: #22c55e;
+  }
+  .pipe-step.highlight-step .pipe-title { color: #22c55e; }
+
+  /* RAG FLOW */
+  .rag-flow {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+    .rag-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 12px;
+    padding: 14px 18px;
+  }
+  .rag-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+    flex-shrink: 0;
+    color: white;
+  }
+  .rag-content { flex: 1; }
+  .rag-title { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
+  .rag-desc { font-size: 12px; color: #64748b; line-height: 1.4; }
+  .rag-badge {
+    font-size: 11px;
+    font-weight: 700;
+    background: #14301e;
+    color: #22c55e;
+    border: 1px solid #22c55e55;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* SIMILARITY */
+  .sim-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+    .sim-card {
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+  .sim-emoji { font-size: 24px; margin-bottom: 6px; }
+  .sim-text { font-size: 12px; color: #475569; margin-bottom: 8px; }
+  .sim-bar-bg {
+    background: #e2e8f0;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .sim-bar { height: 100%; border-radius: 4px; }
+  .sim-pct { font-size: 12px; font-weight: 700; margin-top: 4px; }
+
+  /* WHY SECTION */
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+    .why-card {
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .why-card .icon { font-size: 24px; margin-bottom: 8px; }
+  .why-card .title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+  .why-card .desc { font-size: 12px; color: #64748b; line-height: 1.5; }
+
+  /* FOOTER NOTE */
+    .footer-note {
+    background: linear-gradient(135deg, #f0fdf4, #ffffff);
+    border: 1px solid #86efac88;
+    border-radius: 12px;
+    padding: 18px 24px;
+    margin-top: 20px;
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.7;
+  }
+  .footer-note strong { color: #166534; }
+  .footer-note a { color: #166534; text-decoration: none; border-bottom: 1px solid #86efac; }
+  .footer-note strong { color: #22c55e; }
+  .footer-note a { color: #86efac; text-decoration: none; border-bottom: 1px solid #22c55e55; }
+
+  /* 2D scatter mock */
+  .scatter-wrap {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    margin-top: 12px;
+  }
+    .scatter-box {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #dbe5f0;
+    border-radius: 12px;
+    position: relative;
+    height: 180px;
+    overflow: hidden;
+  }
+  .scatter-box .axis-x {
+    position: absolute;
+    bottom: 20px;
+    left: 10px;
+    right: 10px;
+    height: 1px;
+    background: #cbd5e1;
+  }
+  .scatter-box .axis-y {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 30px;
+    width: 1px;
+    background: #cbd5e1;
+  }
+  .dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .dot-label {
+    position: absolute;
+    font-size: 10px;
+    font-weight: 700;
+    transform: translate(-50%, -130%);
+    white-space: nowrap;
+  }
+  .scatter-legend {
+    width: 160px;
+    font-size: 11px;
+    color: #64748b;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- BANNER + LINKS INSTITUCIONAIS -->
+
+
+  <a href="https://petg10ufpel.github.io/petg10/" target="_blank" style="display:block; text-decoration:none;"><center>
+    <img src="banner.png" alt="Sinergia Inteligente em Saúde Digital — PET-Saúde UFPel" style="width:60%; max-width:900px; height:auto; border-radius:14px; box-shadow:0 10px 30px rgba(15,23,42,.12);">
+  </a></center>
+
+  <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:18px; margin:14px 0 24px 0;">
+
+  <!-- Institucional  -->
+  <img src="instagram.png" style="height:34px; width:auto;"> 
+ <a href="https://www.instagram.com/amorapele_ufpel/" target="_blank">Amor à Pele</a>, 
+<a href="https://www.instagram.com/g10petsaude/" target="_blank">Pet G10</a>|
+<img src="logo.enfermagem.png" style="height:34px; width:auto;">
+<a href="https://wp.ufpel.edu.br/fen/" target="_blank">Faculdade de Enfermagem UFPel</a>
+</div>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="tag">📚 Guia Visual</div>
+    <h1>Embeddings dos Alimentos</h1>
+    <p>Como a IA "entende" documentos nutricionais e recomenda com precisão</p>
+  </div>
+
+  <!-- SEÇÃO 1: O QUE É UM EMBEDDING -->
+  <div class="section-title">01 — O que é um Embedding?</div>
+  <div class="card">
+    <p style="color:#475569; font-size:14px; line-height:1.7; margin-bottom:16px;">
+      Um <strong style="color:#22c55e">embedding</strong> transforma palavras, frases ou documentos inteiros em uma lista de números (vetor). Esses números <em>capturam o significado semântico</em> — palavras com significados próximos ficam próximas no espaço vetorial.
+    </p>
+
+    <div class="analogy-box">
+      <div class="analogy-side">
+        <div class="emoji">🥑</div>
+        <div class="label">Texto original</div>
+        <div class="value">"Abacate é rico em gordura monoinsaturada"</div>
+      </div>
+      <div class="arrow-mid">⟶</div>
+      <div class="analogy-side">
+        <div class="emoji">🔢</div>
+        <div class="label">Embedding (simplificado)</div>
+        <div class="value" style="font-family:monospace; color:#86efac; font-size:12px;">[0.8, −0.2, 0.9, 0.1, −0.5, 0.7, ...]</div>
+      </div>
+    </div>
+
+    <!-- WORD VECTORS TABLE -->
+    <p style="font-size:12px; color:#64748b; margin:16px 0 8px;">Exemplo — dimensões semânticas de alimentos (valores simplificados):</p>
+    <div style="overflow-x:auto;">
+      <div style="display:flex; gap:8px; margin-bottom:4px; margin-left:178px;">
+        <div class="dim-label">gordura</div>
+        <div class="dim-label">proteína</div>
+        <div class="dim-label">carboidrato</div>
+        <div class="dim-label">vitamina</div>
+        <div class="dim-label">caloria</div>
+        <div class="dim-label">vegetal</div>
+      </div>
+      <div class="word-row">
+        <div class="word-label">🥑 abacate</div>
+        <div class="vec-cell highlight">0.9</div>
+        <div class="vec-cell">0.2</div>
+        <div class="vec-cell neg">−0.1</div>
+        <div class="vec-cell">0.7</div>
+        <div class="vec-cell">0.6</div>
+        <div class="vec-cell">0.8</div>
+      </div>
+      <div class="word-row">
+        <div class="word-label">🫒 azeite de oliva</div>
+        <div class="vec-cell highlight">0.8</div>
+        <div class="vec-cell neg">−0.1</div>
+        <div class="vec-cell neg">−0.3</div>
+        <div class="vec-cell">0.5</div>
+        <div class="vec-cell">0.7</div>
+        <div class="vec-cell">0.6</div>
+      </div>
+      <div class="word-row">
+        <div class="word-label">🍗 frango grelhado</div>
+        <div class="vec-cell neg">−0.1</div>
+        <div class="vec-cell highlight">0.9</div>
+        <div class="vec-cell neg">−0.2</div>
+        <div class="vec-cell">0.3</div>
+        <div class="vec-cell">0.4</div>
+        <div class="vec-cell neg">−0.5</div>
+      </div>
+      <div class="word-row">
+        <div class="word-label">🍰 bolo de chocolate</div>
+        <div class="vec-cell">0.6</div>
+        <div class="vec-cell neg">−0.3</div>
+        <div class="vec-cell highlight">0.9</div>
+        <div class="vec-cell neg">−0.2</div>
+        <div class="vec-cell">0.9</div>
+        <div class="vec-cell neg">−0.7</div>
+      </div>
+    </div>
+
+    <!-- 2D SCATTER -->
+    <p style="font-size:12px; color:#64748b; margin:20px 0 8px;">Redução para 2D — alimentos semanticamente similares ficam próximos:</p>
+    <div class="scatter-wrap">
+      <div class="scatter-box">
+        <div class="axis-x"></div>
+        <div class="axis-y"></div>
+        <!-- gorduras saudáveis cluster -->
+        <div class="dot" style="background:#22c55e; left:35%; top:30%;"></div>
+        <div class="dot-label" style="color:#22c55e; left:35%; top:30%;">🥑 abacate</div>
+        <div class="dot" style="background:#16a34a; left:28%; top:42%;"></div>
+        <div class="dot-label" style="color:#16a34a; left:28%; top:42%;">🫒 azeite</div>
+        <div class="dot" style="background:#4ade80; left:45%; top:25%;"></div>
+        <div class="dot-label" style="color:#4ade80; left:45%; top:25%;">🐟 salmão</div>
+        <!-- proteínas -->
+        <div class="dot" style="background:#facc15; left:75%; top:35%;"></div>
+        <div class="dot-label" style="color:#facc15; left:75%; top:35%;">🍗 frango</div>
+        <div class="dot" style="background:#f59e0b; left:82%; top:28%;"></div>
+        <div class="dot-label" style="color:#f59e0b; left:82%; top:28%;">🥚 ovo</div>
+        <!-- carboidratos -->
+        <div class="dot" style="background:#f87171; left:55%; top:72%;"></div>
+        <div class="dot-label" style="color:#f87171; left:55%; top:72%;">🍰 bolo</div>
+        <div class="dot" style="background:#fb923c; left:65%; top:78%;"></div>
+        <div class="dot-label" style="color:#fb923c; left:65%; top:78%;">🍞 pão</div>
+        <!-- label -->
+        <div style="position:absolute; bottom:4px; right:8px; font-size:10px; color:#475569;">dimensão 1 →</div>
+        <div style="position:absolute; top:8px; left:4px; font-size:10px; color:#475569; writing-mode:vertical-rl; transform:rotate(180deg);">dimensão 2 →</div>
+      </div>
+      <div class="scatter-legend">
+        <p style="font-size:11px; font-weight:700; color:#0f172a; margin-bottom:8px;">Clusters formados:</p>
+        <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div><span>Gorduras saudáveis</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#facc15;"></div><span>Fontes de proteína</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f87171;"></div><span>Carboidratos/açúcar</span></div>
+        <p style="font-size:11px; color:#64748b; margin-top:10px; line-height:1.5;">A IA aprende que abacate e azeite são <strong style="color:#86efac">semanticamente próximos</strong> sem ninguém explicar isso!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEÇÃO 2: POR QUE NUTRIÇÃO PRECISA DE EMBEDDINGS -->
+  <div class="section-title">02 — Por que Nutrição precisa de Embeddings?</div>
+  <div class="card">
+    <p style="color:#475569; font-size:14px; line-height:1.7; margin-bottom:16px;">
+      Uma IA genérica não sabe distinguir uma <em>recomendação clínica especializada</em> de uma receita qualquer da internet. Os embeddings resolvem isso indexando o conhecimento específico da nutricionista.
+    </p>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="icon">🔍</div>
+        <div class="title">Busca por Significado</div>
+        <div class="desc">A IA entende que "gordura boa para o coração" e "ácidos graxos ômega-3" são a mesma coisa, mesmo sem a palavra exata.</div>
+      </div>
+      <div class="why-card">
+        <div class="icon">📋</div>
+        <div class="title">Conhecimento Especializado</div>
+        <div class="desc">Os documentos da Dra. Patricia são indexados: protocolos, planos alimentares, contraindicações específicas.</div>
+      </div>
+      <div class="why-card">
+        <div class="icon">🎯</div>
+        <div class="title">Respostas Personalizadas</div>
+        <div class="desc">A IA recupera exatamente o protocolo certo para cada perfil de paciente (diabetes, emagrecimento, gestante...).</div>
+      </div>
+      <div class="why-card">
+        <div class="icon">🛡️</div>
+        <div class="title">Sem "Invenção"</div>
+        <div class="desc">Sem embeddings, a IA "alucina". Com eles, ela só responde com base nos documentos reais da nutricionista.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEÇÃO 3: SIMILARIDADE -->
+  <div class="section-title">03 — Como a Similaridade Funciona</div>
+  <div class="card">
+    <p style="color:#475569; font-size:14px; line-height:1.7;">
+      Quando o paciente pergunta algo, a pergunta também vira um embedding. O sistema compara matematicamente com os documentos indexados e recupera os mais próximos.
+    </p>
+    <div style="background:#1a1a30; border-radius:12px; padding:14px; margin:14px 0; border: 1px solid #2a2a45;">
+      <p style="font-size:13px; color:#64748b; margin-bottom:6px;">📩 Pergunta do paciente:</p>
+      <p style="font-size:15px; font-weight:600; color:#0f172a;">"Quais alimentos posso comer para reduzir o colesterol?"</p>
+      <p style="font-size:12px; color:#22c55e; margin-top:6px;">→ Vira vetor: [0.7, 0.3, −0.2, 0.8, 0.5, ...]</p>
+    </div>
+    <div class="sim-grid">
+      <div class="sim-card">
+        <div class="sim-emoji">📄</div>
+        <div class="sim-text">Protocolo de redução de colesterol</div>
+        <div class="sim-bar-bg"><div class="sim-bar" style="width:92%; background:linear-gradient(to right, #22c55e, #4ade80);"></div></div>
+        <div class="sim-pct" style="color:#22c55e;">92% similar ✓</div>
+      </div>
+      <div class="sim-card">
+        <div class="sim-emoji">📄</div>
+        <div class="sim-text">Guia de gorduras saudáveis</div>
+        <div class="sim-bar-bg"><div class="sim-bar" style="width:78%; background:linear-gradient(to right, #facc15, #f59e0b);"></div></div>
+        <div class="sim-pct" style="color:#facc15;">78% similar ✓</div>
+      </div>
+      <div class="sim-card">
+        <div class="sim-emoji">📄</div>
+        <div class="sim-text">Plano para gestantes</div>
+        <div class="sim-bar-bg"><div class="sim-bar" style="width:12%; background:#ef4444;"></div></div>
+        <div class="sim-pct" style="color:#ef4444;">12% similar ✗</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEÇÃO 4: PIPELINE RAG -->
+  <div class="section-title">04 — Pipeline Completo: RAG para Nutrição</div>
+  <div class="card">
+    <p style="color:#475569; font-size:13px; line-height:1.6; margin-bottom:20px;">
+      <strong style="color:#facc15">RAG = Retrieval Augmented Generation</strong> — a IA primeiro <em>busca</em> nos documentos indexados, depois <em>gera</em> a resposta com base no que encontrou.
+    </p>
+
+    <!-- INDEXAÇÃO -->
+    <p style="font-size:12px; font-weight:700; color:#64748b; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Fase 1 — Indexação (feita uma vez)</p>
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-icon">📁</div>
+        <div class="pipe-title">Documentos</div>
+        <div class="pipe-desc">PDFs, protocolos, planos da Dra. Patricia</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon">✂️</div>
+        <div class="pipe-title">Chunking</div>
+        <div class="pipe-desc">Divide em trechos de ~500 tokens</div>
+      </div>
+      <div class="pipe-step highlight-step">
+        <div class="pipe-icon">🧮</div>
+        <div class="pipe-title">Embeddings</div>
+        <div class="pipe-desc">Cada trecho vira um vetor numérico</div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-icon">🗄️</div>
+        <div class="pipe-title">Vector DB</div>
+        <div class="pipe-desc">Vetores salvos (Chroma, Pinecone...)</div>
+      </div>
+    </div>
+
+    <div style="height:1px; background:#2a2a45; margin:20px 0;"></div>
+
+    <!-- CONSULTA -->
+    <p style="font-size:12px; font-weight:700; color:#64748b; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Fase 2 — Consulta em tempo real</p>
+    <div class="rag-flow">
+      <div class="rag-row">
+        <div class="rag-num">1</div>
+        <div class="rag-content">
+          <div class="rag-title">Paciente faz uma pergunta</div>
+          <div class="rag-desc">"Tenho triglicérides alto, o que devo evitar comer?"</div>
+        </div>
+        <div class="rag-badge">💬 Input</div>
+      </div>
+      <div class="rag-row">
+        <div class="rag-num">2</div>
+        <div class="rag-content">
+          <div class="rag-title">Pergunta vira Embedding</div>
+          <div class="rag-desc">A pergunta é transformada em vetor com o mesmo modelo usado na indexação</div>
+        </div>
+        <div class="rag-badge">🧮 Embedding</div>
+      </div>
+      <div class="rag-row">
+        <div class="rag-num">3</div>
+        <div class="rag-content">
+          <div class="rag-title">Busca Semântica no Vector DB</div>
+          <div class="rag-desc">Sistema encontra os 3-5 trechos mais similares dos documentos da nutricionista</div>
+        </div>
+        <div class="rag-badge">🔍 Retrieval</div>
+      </div>
+      <div class="rag-row">
+        <div class="rag-num">4</div>
+        <div class="rag-content">
+          <div class="rag-title">IA Gera a Resposta</div>
+          <div class="rag-desc">Claude/GPT recebe: pergunta + trechos recuperados → gera resposta baseada no conhecimento da Dra. Patricia, não em dados genéricos da internet</div>
+        </div>
+        <div class="rag-badge">✨ Generation</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTA FINAL -->
+  <div class="footer-note">
+    <strong>✅ Sua intuição está correta!</strong> Os embeddings são o "índice semântico" que permite à IA trabalhar como uma nutricionista experiente — não como uma IA genérica. Cada documento indexado é como um neurônio de memória especializado.<br><br>
+    <strong>🔧 Próximo passo para o projeto:</strong> Em <a href="https://dietpatriciaxbittencourt.streamlit.app/">dietpatriciaxbittencourt.streamlit.app</a>, o ajuste dos embeddings significa garantir que os documentos certos foram carregados, o modelo de embedding é consistente entre indexação e consulta, e o limiar de similaridade está calibrado para respostas relevantes.
+  </div>
+
+</div>
+</body>
+</html>

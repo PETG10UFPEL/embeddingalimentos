@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "disco-retina-371501",
+  "private_key_id": "525385725005759603f5c3aaa97ba7d5e653d8cf",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDszoZGlEuBZpCf\nWesuNFlZDxwG4s8oB0vJ2bvfsOeBka5m09ZIfYGAkvpASNhBYoeELT+C4biQh1Bs\ngAvI580Z9sDXdHyDOu/2sZz+BruHD+uVwdfistg5/J3sDzmVc5sEwbphhTdvzKaF\n1pcX/LmcpceJA46UzHh2432OfWangRroDP2p9Bdjr3faJmA6mTpCbDcSkLBoq0uy\nPawFctLcKHzDYg2O3tMQi/fcG+QwNoPF5tgOj5MCIcXyhsS69cdLstsGid1b43Lo\nRcgjjjvcGSPQzpPMUXC1yewGGZV5c0LyJs7CZKknJS1Wg7kftuNC6x1gzOEwSsbE\nXJW4RNb7AgMBAAECggEAX33CiNiJABPXcuLEIvwqIW8l2qMAbUBP8AQUrhX8rPON\nk9qNmOq/W5UpQ938EpXEVukWKNWT4vgl1rLlzaynuPYXemp3QUX1eRHTYF5fpY2m\nbtvdjgWXiv6Swhu7mUgmdUsXuPaKzdMFPYg0opAfWwtAxMAB8X/ofeyrd1ebGyT+\nmcajP9xO6YBKBprEwnEJeTSVriHD0C32P2hf2boqtqFT30JzIEAg8agVyEcx7Cpg\niWwOjBHQEk7xsJdsOBAcXM/bzf0ePWPjpNpdP2XTIssAQNUEdX+Zqwj9nyD+rvYj\nOBs8VVCe1LgwZyb94J90FQsIjoLI0NSuVtRnYP/a8QKBgQD5CyWibk3WGNCz64fN\nlmQ+raEj9W1KcR28Tjvae3jBKIH2BMbK34sYVEdKOO+zT5RsJ4KjUvuIX7u3iq1k\naEceWd0e6cjrep1APmd818SklHkWpijUF6QQL2z/jv8jJCOYaR28R2al+LK+QwZV\njs9qNdFfcMwlrCbLFaOPj1HnUQKBgQDza9/6xWVzuCfVTnpZnNyHH4rvITtEbnsg\nbv2nzpHH4Uj0tsk7DfSqVTCeCbpTFomqMprIO84LkqSOWEMIa2Zlg9pPjFA54emM\nI49G+5vETt/ffCGAMY9XXVZnJMEHYrvuB/aKsbHKMLLyg5tUrlghGCb0MXucuut+\nEVtnN/TeiwKBgE1deCCAka+L3/G0nmhwas3J1IA+MuhoQWuJBjD2IGoo8k6B51uI\nnEY/kDHvhA85DouWro+cLMWNr9vxubGybz1vfzCmQaNdYNJfUHjI8q6J7R/rGE3i\n1jWs9fhh7MJ27JPhO7qMl8fBfY17dtFHXwnIlDVI7jJZy2dVXo0vYasxAoGBAKXZ\nXeWSEKljU2B1886SnX5C83ox/huF2sYiWRi4GYNB718sGrbtr0FOga1rm1N5C5q2\nl9bNSHmCFDQX1rQp2L5Zs6h3RUHqtiERKVGHpH1/7/BotrqNCcjQg0oLNKk/kCOB\nsWyV3TiRLZsmJ/LuRoVl20SNYldK06A1Wz1cVq45AoGBALdPXv7+pfSrZ7Q9jQY1\nJpD4fN4Aw7u09XwZ2mnTpweqVGh2eCq8A8hM1r7tf8NdiLyX3J5aGa0wml86+D7u\n+HY0mV5zv73h06zF6MVKWFbcnR9xh0S7KGVEGXkgESLGx84aB25DuxXQt0bDYMYA\n1KBrEd4RWowMs6DMdnLm1keK\n-----END PRIVATE KEY-----\n",
+  "client_email": "dieta-743@disco-retina-371501.iam.gserviceaccount.com",
+  "client_id": "111076461027767150994",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/dieta-743%40disco-retina-371501.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

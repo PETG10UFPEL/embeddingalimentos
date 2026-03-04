@@ -107,63 +107,41 @@ st.markdown(f"""
 # Assinatura — tamanho ~12pt
 # ==============================
 st.markdown("""
-<p class="info-text" style="margin-bottom:0.8rem;">
+<p class="info-text">
   <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
   Disciplina 15001103 M1 &mdash; Princípios de Inteligência Artificial Aplicados &middot;
   UFPel (2025/6-2) &middot; Prof. Alejandro Martins R. &middot;
   Sistema elaborado em parceria junto à P&amp;D do Projeto PET UFPel Saúde Digital &mdash;
   Telemonitoramento de Feridas Crônicas.
 </p>
+</p>
+</p>
 """, unsafe_allow_html=True)
 
 # ==============================
 # Texto explicativo RAG + link embeddings
 # ==============================
+embeddings_path = Path(__file__).parent / "assets" / "embeddings_alimentos.html"
+if embeddings_path.exists():
+    embeddings_b64 = base64.b64encode(embeddings_path.read_bytes()).decode()
+    embeddings_href = f"data:text/html;base64,{embeddings_b64}"
+else:
+    embeddings_href = "#"
 
-def _html_com_imagens_embutidas(html_path: Path) -> str:
-    """Lê o HTML e substitui src de imagens locais por base64."""
-    import re
-    html = html_path.read_text(encoding="utf-8", errors="replace")
-    assets_dir = html_path.parent
-
-    def substituir(match):
-        src = match.group(1)
-        # só processa caminhos relativos (não http)
-        if src.startswith("http"):
-            return match.group(0)
-        img_path = assets_dir / src
-        if img_path.exists():
-            mime = "image/png" if src.lower().endswith(".png") else "image/jpeg"
-            b64 = base64.b64encode(img_path.read_bytes()).decode()
-            return f'src="data:{mime};base64,{b64}"'
-        return match.group(0)
-
-    html = re.sub(r'src="([^"]+)"', substituir, html)
-    return html
-
-st.markdown("""
-<p class="info-text" style="margin-top:0.8rem;">
+st.markdown(f"""
+<p class="info-text">
   <strong>Retrieval-Augmented Generation (RAG-AI)</strong> melhora a precisão dos modelos de linguagem (LLMs)
   ao recuperar dados externos — como documentos e bases de dados — para responder perguntas,
-  reduzindo as chamadas alucinações.
-</p>
-<p class="info-text" style="margin-top:0.2rem;">
+  reduzindo as chamadas alucinações.<br><br>
   <strong>Embeddings</strong> são representações numéricas (vetores) de textos que capturam seu significado
   semântico, permitindo que a IA encontre informações relevantes por similaridade de sentido,
-  e não apenas por palavras-chave.
-</p>
-<p class="info-text" style="margin-top:0.2rem;">
+  e não apenas por palavras-chave.<br><br>
   Quer visualizar a representação gráfica do conhecimento?
+  <a href="{embeddings_href}" target="_blank" style="font-weight:600; color:#0066cc;">
+    Clique aqui para ver os Embeddings dos Alimentos
+  </a>
 </p>
 """, unsafe_allow_html=True)
-
-_emb_path = Path(__file__).parent / "assets" / "embeddings_alimentos.html"
-if _emb_path.exists():
-    with st.expander("📊 Ver Embeddings dos Alimentos", expanded=False):
-        _html_content = _html_com_imagens_embutidas(_emb_path)
-        components.html(_html_content, height=700, scrolling=True)
-else:
-    st.caption("_(arquivo embeddings_alimentos.html não encontrado em assets/)_")
 
 st.divider()
 
