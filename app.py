@@ -23,7 +23,7 @@ from ingest import build_index
 from rag import answer
 
 
-st.set_page_config(page_title="Planejador de Dieta (RAG)", layout="wide")
+st.set_page_config(page_title="Embeddings Alimentos - PET G10 UFPel", layout="wide")
 
 # ==============================
 # CSS global
@@ -76,7 +76,7 @@ if banner_b64:
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.title("🥗 Planejador de Dieta - Patrícia")
+    st.title("🥗 Embeddings Alimentos - PET G10 UFPel")
 
 # ==============================
 # Links institucionais
