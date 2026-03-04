@@ -108,11 +108,14 @@ st.markdown(f"""
 # ==============================
 st.markdown("""
 <p class="info-text" style="margin-bottom:0.8rem;">
-  <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
-  Disciplina 15001103 M1 &mdash; Princípios de Inteligência Artificial Aplicados &middot;
-  UFPel (2025/6-2) &middot; Prof. Alejandro Martins R. &middot;
+  Trabalho final na
+  <a href="https://institucional.ufpel.edu.br/disciplinas/cod/15001103" target="_blank">disciplina 15001103 M1 — Princípios de Inteligência Artificial Aplicados</a>
+  &mdash; UFPel (2025/2-2) &mdash;
+  prof. <a href="https://institucional.ufpel.edu.br/servidores/id/32772" target="_blank">Alejandro Martins R.</a>,
+  da estudante do Curso de Nutrição <strong>Patrícia Xavier Bittencourt</strong>.<br>
   Sistema elaborado em parceria junto à P&amp;D do Projeto PET UFPel Saúde Digital &mdash;
-  Telemonitoramento de Feridas Crônicas.
+  Telemonitoramento de Feridas Crônicas, coordenado pela professora
+  <a href="https://institucional.ufpel.edu.br/servidores/id/2858" target="_blank">Adrize Rutz Porto</a>.
 </p>
 """, unsafe_allow_html=True)
 
