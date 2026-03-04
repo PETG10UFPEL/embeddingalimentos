@@ -1,18 +1,9 @@
 import os
-import streamlit as stcd "C:\Users\aljma\G10\aplicativos\diet_app"
-git add app.py drive_sync.py
-git commit -m "fix: credenciais via st.secrets; feat: banner maior e senha admin na sidebar"
-git push origin main
+import streamlit as st
 from pathlib import Path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-import json
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
@@ -37,10 +28,7 @@ def sync_folder(folder_id: str, out_dir: str) -> list[Path]:
         file_id = f["id"]
         mime = f["mimeType"]
 
-        # Baixa só arquivos "baixáveis" direto
-        # (Docs/Sheets exigem export; dá pra acrescentar depois)
         if mime.startswith("application/vnd.google-apps"):
-            # pular por enquanto (ou implementar export)
             continue
 
         dest = out / name
