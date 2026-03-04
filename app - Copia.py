@@ -23,7 +23,7 @@ from ingest import build_index
 from rag import answer
 
 
-st.set_page_config(page_title="Embeddings Alimentos - PET G10 UFPel", layout="wide")
+st.set_page_config(page_title="Planejador de Dieta (RAG)", layout="wide")
 
 # ==============================
 # CSS global
@@ -72,11 +72,11 @@ if banner_b64:
     st.markdown(f"""
     <div style="display:flex; justify-content:center; margin-bottom:8px;">
       <img src="data:image/png;base64,{banner_b64}"
-           style="width:52%; height:auto; border-radius:6px;">
+           style="width:40%; height:auto; border-radius:6px;">
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.title("🥗 Embeddings Alimentos - PET G10 UFPel")
+    st.title("🥗 Planejador de Dieta - Patrícia")
 
 # ==============================
 # Links institucionais
@@ -172,26 +172,18 @@ st.divider()
 # ==============================
 with st.sidebar:
     st.header("Base de conhecimento (Google Drive)")
+    folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
+    st.text_input("Folder ID", value=folder_id, key="folder_id")
 
-    admin_pass = st.text_input("Senha admin", type="password")
-    is_admin = admin_pass == st.secrets.get("ADMIN_PASSWORD", "")
+    if st.button("1) Sincronizar arquivos do Drive"):
+        with st.spinner("Baixando..."):
+            files = sync_folder(st.session_state.folder_id, "data/raw_docs")
+        st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
 
-    if is_admin:
-        folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
-        st.text_input("Folder ID", value=folder_id, key="folder_id")
-
-        if st.button("1) Sincronizar arquivos do Drive"):
-            with st.spinner("Baixando..."):
-                files = sync_folder(st.session_state.folder_id, "data/raw_docs")
-            st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
-
-        if st.button("2) Recriar índice (embeddings)"):
-            with st.spinner("Indexando..."):
-                n = build_index("data/raw_docs", "data/chroma_db")
-            st.success(f"Índice criado com {n} trechos.")
-    else:
-        if admin_pass:
-            st.error("Senha incorreta")
+    if st.button("2) Recriar índice (embeddings)"):
+        with st.spinner("Indexando..."):
+            n = build_index("data/raw_docs", "data/chroma_db")
+        st.success(f"Índice criado com {n} trechos.")
 
 # ==============================
 # Componente de voz (reutilizável)

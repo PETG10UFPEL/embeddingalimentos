@@ -1,0 +1,23 @@
+ O volume na unidade C n∆o tem nome.
+ O N£mero de SÇrie do Volume Ç CE48-F4A9
+
+ Pasta de C:\Users\aljma\G10\aplicativos\diet_app
+
+26/02/2026  10:17    <DIR>          .
+26/02/2026  10:17    <DIR>          ..
+25/02/2026  21:45               284 .env
+25/02/2026  22:04               278 .gitignore
+26/02/2026  09:31    <DIR>          .venv
+26/02/2026  10:17                 0 a.txt
+26/02/2026  10:03             2.720 app.py
+25/02/2026  21:28    <DIR>          data
+25/02/2026  21:35             1.583 drive_sync.py
+25/02/2026  21:41             4.322 ingest.py
+26/02/2026  09:25             3.432 rag.py
+25/02/2026  22:04               135 README.md
+26/02/2026  09:32               263 requirements.txt
+26/02/2026  09:28                11 runtime.txt
+26/02/2026  10:05    <DIR>          venv
+25/02/2026  21:59    <DIR>          __pycache__
+              10 arquivo(s)         13.028 bytes
+               6 pasta(s)   61.807.570.944 bytes dispon°veis
