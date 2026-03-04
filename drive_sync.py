@@ -1,4 +1,8 @@
 import os
+import streamlit as stcd "C:\Users\aljma\G10\aplicativos\diet_app"
+git add app.py drive_sync.py
+git commit -m "fix: credenciais via st.secrets; feat: banner maior e senha admin na sidebar"
+git push origin main
 from pathlib import Path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -6,9 +10,16 @@ from googleapiclient.http import MediaIoBaseDownload
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import json
+
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
 def get_drive_service():
-    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    creds = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], scopes=SCOPES
+    )
     return build("drive", "v3", credentials=creds)
 
 def sync_folder(folder_id: str, out_dir: str) -> list[Path]:
