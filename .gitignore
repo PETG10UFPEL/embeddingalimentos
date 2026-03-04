@@ -1,32 +1,6 @@
-﻿# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
-*.tmp
-
-# Env / secrets
 .env
-*.env
-
-# Virtual env
-.venv/
 venv/
-ENV/
-env/
-
-# Streamlit
-.streamlit/
-
-# OS / editor
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Data (não versionar base + docs do paciente)
-data/raw_docs/
-data/chroma_db/
-
-.env
+.venv/
+__pycache__/
+data/
+*.pyc
