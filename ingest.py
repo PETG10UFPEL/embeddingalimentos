@@ -11,6 +11,7 @@ NOTA: No Streamlit Cloud o filesystem é efêmero.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import List, Tuple, Optional
 
@@ -83,7 +84,9 @@ def build_index(
     db_dir: str = DB_DIR_DEFAULT,       # ignorado no modo in-memory
     chunk_size: int = 900,
     chunk_overlap: int = 150,
-    in_memory: bool = True,             # ← NOVO: padrão True para Streamlit Cloud
+    in_memory: bool = True,             # ← padrão True para Streamlit Cloud
+    batch_size: int = 50,               # chunks por lote enviado à API
+    batch_delay: float = 12.0,          # segundos de pausa entre lotes (evita 429)
 ) -> Tuple[int, Optional[Chroma]]:
     """
     Indexa os documentos e retorna (n_chunks, vectordb).
@@ -92,6 +95,8 @@ def build_index(
     - Se in_memory=False → persiste em db_dir (ideal para rodar local).
 
     O objeto vectordb deve ser salvo em st.session_state para reutilização.
+    Os chunks são enviados em lotes (batch_size) com pausa (batch_delay)
+    entre eles para não estourar a cota da API (erro 429).
     """
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -117,26 +122,42 @@ def build_index(
         google_api_key=api_key,
     )
 
-    # 4. Cria o vectorstore
-    if in_memory:
-        # Sem persist_directory → fica só na RAM desta sessão
-        vectordb = Chroma.from_documents(
-            documents=chunks,
-            embedding=embeddings,
-            collection_name=COLLECTION_NAME,
-        )
-    else:
-        vectordb = Chroma.from_documents(
-            documents=chunks,
-            embedding=embeddings,
-            persist_directory=db_dir,
-            collection_name=COLLECTION_NAME,
-        )
+    # 4. Cria o vectorstore em lotes para evitar erro 429
+    vectordb = None
+    total_batches = (len(chunks) + batch_size - 1) // batch_size
+
+    for i, start in enumerate(range(0, len(chunks), batch_size)):
+        batch = chunks[start : start + batch_size]
+        print(f"Lote {i + 1}/{total_batches} — {len(batch)} chunks...")
+
+        if vectordb is None:
+            # Primeiro lote: cria o vectorstore
+            if in_memory:
+                vectordb = Chroma.from_documents(
+                    documents=batch,
+                    embedding=embeddings,
+                    collection_name=COLLECTION_NAME,
+                )
+            else:
+                vectordb = Chroma.from_documents(
+                    documents=batch,
+                    embedding=embeddings,
+                    persist_directory=db_dir,
+                    collection_name=COLLECTION_NAME,
+                )
+        else:
+            # Lotes seguintes: adiciona ao vectorstore já criado
+            vectordb.add_documents(batch)
+
+        # Pausa entre lotes (exceto após o último)
+        if start + batch_size < len(chunks):
+            print(f"  Aguardando {batch_delay}s para respeitar limite da API...")
+            time.sleep(batch_delay)
 
     if skipped:
         print(f"Arquivos ignorados/erro: {len(skipped)}")
 
-    print(f"Sucesso! {len(chunks)} trechos indexados.")
+    print(f"Sucesso! {len(chunks)} trechos indexados em {total_batches} lote(s).")
     return len(chunks), vectordb
 
 
