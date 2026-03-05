@@ -23,7 +23,7 @@ from ingest import build_index
 from rag import answer
 
 
-st.set_page_config(page_title="Embeddings Alimentos - PET G10 UFPel", layout="wide")
+st.set_page_config(page_title="Planejador de Dieta (RAG)", layout="wide")
 
 # ==============================
 # CSS global
@@ -72,11 +72,11 @@ if banner_b64:
     st.markdown(f"""
     <div style="display:flex; justify-content:center; margin-bottom:8px;">
       <img src="data:image/png;base64,{banner_b64}"
-           style="width:52%; height:auto; border-radius:6px;">
+           style="width:40%; height:auto; border-radius:6px;">
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.title("🥗 Embeddings Alimentos - PET G10 UFPel")
+    st.title("🥗 Planejador de Dieta - Patrícia")
 
 # ==============================
 # Links institucionais
@@ -108,14 +108,11 @@ st.markdown(f"""
 # ==============================
 st.markdown("""
 <p class="info-text" style="margin-bottom:0.8rem;">
-  Trabalho final na
-  <a href="https://institucional.ufpel.edu.br/disciplinas/cod/15001103" target="_blank">disciplina 15001103 M1 — Princípios de Inteligência Artificial Aplicados</a>
-  &mdash; UFPel (2025/2-2) &mdash;
-  prof. <a href="https://institucional.ufpel.edu.br/servidores/id/32772" target="_blank">Alejandro Martins R.</a>,
-  da estudante do Curso de Nutrição <strong>Patrícia Xavier Bittencourt</strong>.<br>
+  <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
+  Disciplina 15001103 M1 &mdash; Princípios de Inteligência Artificial Aplicados &middot;
+  UFPel (2025/6-2) &middot; Prof. Alejandro Martins R. &middot;
   Sistema elaborado em parceria junto à P&amp;D do Projeto PET UFPel Saúde Digital &mdash;
-  Telemonitoramento de Feridas Crônicas, coordenado pela professora
-  <a href="https://institucional.ufpel.edu.br/servidores/id/2858" target="_blank">Adrize Rutz Porto</a>.
+  Telemonitoramento de Feridas Crônicas.
 </p>
 """, unsafe_allow_html=True)
 
@@ -175,26 +172,27 @@ st.divider()
 # ==============================
 with st.sidebar:
     st.header("Base de conhecimento (Google Drive)")
+    folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
+    st.text_input("Folder ID", value=folder_id, key="folder_id")
 
-    admin_pass = st.text_input("Senha admin", type="password")
-    is_admin = admin_pass == st.secrets.get("ADMIN_PASSWORD", "")
+    if st.button("1) Sincronizar arquivos do Drive"):
+        with st.spinner("Baixando..."):
+            files = sync_folder(st.session_state.folder_id, "data/raw_docs")
+        st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
 
-    if is_admin:
-        folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
-        st.text_input("Folder ID", value=folder_id, key="folder_id")
+    if st.button("2) Recriar índice (embeddings)"):
+        with st.spinner("Indexando..."):
+            n, vectordb = build_index("data/raw_docs", "data/chroma_db", in_memory=True)
+            if vectordb is not None:
+                st.session_state["vectordb"] = vectordb
+                st.success(f"Índice criado com {n} trechos.")
+            else:
+                st.error("Nenhum documento encontrado em data/raw_docs. Sincronize primeiro.")
 
-        if st.button("1) Sincronizar arquivos do Drive"):
-            with st.spinner("Baixando..."):
-                files = sync_folder(st.session_state.folder_id, "data/raw_docs")
-            st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
-
-        if st.button("2) Recriar índice (embeddings)"):
-            with st.spinner("Indexando..."):
-                n = build_index("data/raw_docs", "data/chroma_db")
-            st.success(f"Índice criado com {n} trechos.")
+    if "vectordb" in st.session_state and st.session_state["vectordb"] is not None:
+        st.info("✅ Índice carregado na sessão atual.")
     else:
-        if admin_pass:
-            st.error("Senha incorreta")
+        st.warning("⚠️ Índice não carregado. Execute os passos 1 e 2 acima.")
 
 # ==============================
 # Componente de voz (reutilizável)
@@ -307,11 +305,11 @@ q = st.text_area(
 )
 
 # ==============================
-# Cache
+# Resposta (sem cache — Chroma não é serializável pelo st.cache_data)
 # ==============================
-@st.cache_data(show_spinner=False, ttl=3600)
 def cached_answer(q, patient, k):
-    return answer(q, patient, k=k)
+    vectordb = st.session_state.get("vectordb", None)
+    return answer(q, patient, k=k, vectordb=vectordb)
 
 # ==============================
 # Botões
