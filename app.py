@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-load_dotenv(override=True)
+load_dotenv(override=True)  # DEVE ser antes de qualquer outro import
 
 import base64
 from pathlib import Path
@@ -19,19 +19,17 @@ except Exception:
     pass
 
 from drive_sync import sync_folder
-from ingest import build_index, get_cached_vectordb   # ← importa o getter
+from ingest import build_index
 from rag import answer
+
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import Chroma
+
+DB_DIR         = "data/chroma_db"
+COLLECTION_NAME = "diet_knowledge"
 
 
 st.set_page_config(page_title="Planejador de Dieta (RAG)", layout="wide")
-
-# ──────────────────────────────────────────────────────────────
-# Versão do índice: incrementada a cada "Recriar índice".
-# Fica no session_state (por usuário), mas o vectordb fica no
-# cache do servidor (compartilhado e persistente entre reruns).
-# ──────────────────────────────────────────────────────────────
-if "index_version" not in st.session_state:
-    st.session_state["index_version"] = 0
 
 # ==============================
 # CSS global
@@ -73,7 +71,32 @@ def img_b64(filename: str) -> str:
     return ""
 
 # ==============================
-# Banner
+# Carrega o vectordb do disco (uma vez por sessão)
+# ==============================
+@st.cache_resource
+def load_vectordb_from_disk():
+    """
+    Lê o índice já persistido em data/chroma_db/.
+    Retorna None se ainda não foi criado.
+    Sobrevive a reruns sem reindexar.
+    """
+    if not Path(DB_DIR).exists():
+        return None
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/gemini-embedding-001",
+        google_api_key=api_key,
+    )
+    return Chroma(
+        persist_directory=DB_DIR,
+        embedding_function=embeddings,
+        collection_name=COLLECTION_NAME,
+    )
+
+# ==============================
+# Banner — 40% da largura, centralizado
 # ==============================
 banner_b64 = img_b64("banner.png")
 if banner_b64:
@@ -111,6 +134,9 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ==============================
+# Assinatura
+# ==============================
 st.markdown("""
 <p class="info-text" style="margin-bottom:0.8rem;">
   <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
@@ -183,33 +209,23 @@ with st.sidebar:
         st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
 
     if st.button("2) Recriar índice (embeddings)"):
-        # Incrementa a versão para invalidar o slot de cache anterior
-        new_version = st.session_state["index_version"] + 1
         with st.spinner("Indexando..."):
-            n, vectordb = build_index(
-                "data/raw_docs",
-                "data/chroma_db",
-                in_memory=True,
-                cache_version=new_version,   # ← registra com nova versão
-            )
+            n, vectordb = build_index("data/raw_docs", DB_DIR)
             if vectordb is not None:
-                st.session_state["index_version"] = new_version
-                st.success(f"Índice criado com {n} trechos. ✅ Persistido no cache do servidor.")
+                # Invalida o cache para que load_vectordb_from_disk() releia o disco
+                st.cache_resource.clear()
+                st.success(f"Índice criado com {n} trechos.")
             else:
                 st.error("Nenhum documento encontrado em data/raw_docs. Sincronize primeiro.")
 
-    # Mostra status usando o cache, não o session_state
-    current_version = st.session_state["index_version"]
-    vectordb_cached = get_cached_vectordb(current_version)
-
-    if current_version > 0 and vectordb_cached is not None:
-        st.info("✅ Índice carregado e persistido (não precisa reindexar ao navegar).")
+    # Status: verifica se o índice existe no disco
+    if Path(DB_DIR).exists():
+        st.info("✅ Índice disponível em disco.")
     else:
-        st.warning("⚠️ Índice não carregado. Execute os passos 1 e 2 acima.")
-
+        st.warning("⚠️ Índice não encontrado. Execute os passos 1 e 2 acima.")
 
 # ==============================
-# Componente de voz
+# Componente de voz (reutilizável)
 # ==============================
 def mic_component(target_label: str, field_index: int):
     key = f"mic_{field_index}"
@@ -318,13 +334,6 @@ q = st.text_area(
 )
 
 # ==============================
-# Busca o vectordb do cache do servidor (não do session_state)
-# ==============================
-def get_vectordb_for_query():
-    version = st.session_state.get("index_version", 0)
-    return get_cached_vectordb(version)
-
-# ==============================
 # Botões
 # ==============================
 col_btn1, col_btn2, _ = st.columns([1, 1, 3])
@@ -332,9 +341,7 @@ with col_btn1:
     gerar = st.button("🚀 Gerar resposta", type="primary")
 with col_btn2:
     if st.button("🗑️ Limpar cache"):
-        st.cache_data.clear()
         st.cache_resource.clear()
-        st.session_state["index_version"] = 0
         st.success("Cache limpo!")
 
 # ==============================
@@ -346,7 +353,7 @@ if gerar:
     else:
         with st.spinner("Buscando nos documentos e gerando resposta..."):
             patient_short = patient[:2000]
-            vectordb = get_vectordb_for_query()
+            vectordb = load_vectordb_from_disk()
             resp, hits = answer(q, patient_short, k=3, vectordb=vectordb)
 
         col1, col2 = st.columns([2, 1])

@@ -2,11 +2,6 @@
 """
 Indexador (RAG) para o projeto PET-Saúde G10.
 Usa Google Generative AI Embeddings (gemini-embedding-001).
-
-CORREÇÃO: vectordb agora é mantido via st.cache_resource, que sobrevive
-          a reruns do Streamlit sem reindexar. O st.session_state era
-          apagado a cada rerun; cache_resource persiste enquanto o servidor
-          estiver de pé.
 """
 
 from __future__ import annotations
@@ -30,50 +25,6 @@ RAW_DIR_DEFAULT  = "data/raw_docs"
 DB_DIR_DEFAULT   = "data/chroma_db"
 COLLECTION_NAME  = "diet_knowledge"
 
-
-# ──────────────────────────────────────────────────────────────
-# Cache de nível de servidor: sobrevive a reruns e navegações
-# na mesma sessão do Streamlit Cloud.
-# A chave do cache inclui um "version" que o app incrementa
-# sempre que o usuário clica em "Recriar índice".
-# ──────────────────────────────────────────────────────────────
-try:
-    import streamlit as st
-
-    @st.cache_resource(show_spinner=False)
-    def _cached_vectordb(version: int) -> Optional[Chroma]:
-        """
-        Retorna o vectordb guardado no cache do servidor.
-        Só é invocado quando 'version' muda (novo índice criado).
-        O resultado é armazenado pelo Streamlit e reutilizado em
-        todos os reruns subsequentes sem custo de reindexação.
-        """
-        # O valor real é injetado por set_cached_vectordb() logo abaixo.
-        # Na primeira chamada (antes do índice existir) retorna None.
-        return None
-
-    # Slot mutável para guardar o objeto real entre reruns
-    _DB_STORE: dict = {}
-
-    def set_cached_vectordb(vectordb: Chroma, version: int) -> None:
-        """Salva o vectordb no slot e invalida o cache para a nova version."""
-        _DB_STORE[version] = vectordb
-        # Força o Streamlit a reconhecer a nova versão
-        # (a função cacheada retorna None, mas get_cached_vectordb usa _DB_STORE)
-
-    def get_cached_vectordb(version: int) -> Optional[Chroma]:
-        """Recupera o vectordb do slot (sobrevive a reruns)."""
-        return _DB_STORE.get(version)
-
-except ImportError:
-    # Fora do Streamlit (testes, CLI) — stubs simples
-    def set_cached_vectordb(vectordb, version): pass
-    def get_cached_vectordb(version): return None
-
-
-# ──────────────────────────────────────────────────────────────
-# Loaders
-# ──────────────────────────────────────────────────────────────
 
 def _load_pdf(path: Path) -> List[Document]:
     return PyPDFLoader(str(path)).load()
@@ -124,27 +75,17 @@ def load_all_docs(raw_dir: str) -> Tuple[List[Document], List[str]]:
     return docs, skipped
 
 
-# ──────────────────────────────────────────────────────────────
-# build_index — igual ao original, mas agora também chama
-# set_cached_vectordb() para persistir no cache do servidor.
-# ──────────────────────────────────────────────────────────────
-
 def build_index(
     raw_dir: str = RAW_DIR_DEFAULT,
     db_dir: str = DB_DIR_DEFAULT,
     chunk_size: int = 900,
     chunk_overlap: int = 150,
-    in_memory: bool = True,
     batch_size: int = 50,
     batch_delay: float = 12.0,
-    cache_version: int = 1,        # ← novo: versão do cache a registrar
 ) -> Tuple[int, Optional[Chroma]]:
     """
-    Indexa os documentos e retorna (n_chunks, vectordb).
-
-    Novidade: ao final, registra o vectordb em set_cached_vectordb()
-    com a cache_version fornecida, tornando-o disponível a todos os
-    reruns via get_cached_vectordb(version).
+    Indexa os documentos, persiste em disco e retorna (n_chunks, vectordb).
+    O índice sobrevive a reruns e reinicializações do servidor.
     """
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -175,19 +116,12 @@ def build_index(
         print(f"Lote {i + 1}/{total_batches} — {len(batch)} chunks...")
 
         if vectordb is None:
-            if in_memory:
-                vectordb = Chroma.from_documents(
-                    documents=batch,
-                    embedding=embeddings,
-                    collection_name=COLLECTION_NAME,
-                )
-            else:
-                vectordb = Chroma.from_documents(
-                    documents=batch,
-                    embedding=embeddings,
-                    persist_directory=db_dir,
-                    collection_name=COLLECTION_NAME,
-                )
+            vectordb = Chroma.from_documents(
+                documents=batch,
+                embedding=embeddings,
+                persist_directory=db_dir,       # ← sempre em disco
+                collection_name=COLLECTION_NAME,
+            )
         else:
             vectordb.add_documents(batch)
 
@@ -195,18 +129,19 @@ def build_index(
             print(f"  Aguardando {batch_delay}s para respeitar limite da API...")
             time.sleep(batch_delay)
 
+    # Compatibilidade com versões antigas do Chroma
+    try:
+        vectordb.persist()
+    except Exception:
+        pass
+
     if skipped:
         print(f"Arquivos ignorados/erro: {len(skipped)}")
 
     print(f"Sucesso! {len(chunks)} trechos indexados em {total_batches} lote(s).")
-
-    # ← NOVO: registra no cache de servidor
-    if vectordb is not None:
-        set_cached_vectordb(vectordb, cache_version)
-
     return len(chunks), vectordb
 
 
 if __name__ == "__main__":
-    n, _ = build_index(in_memory=False)
+    n, _ = build_index()
     print(f"{n} trechos indexados.")
