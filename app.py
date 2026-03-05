@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-load_dotenv(override=True)  # DEVE ser antes de qualquer outro import
+load_dotenv(override=True)
 
 import base64
 from pathlib import Path
@@ -19,11 +19,19 @@ except Exception:
     pass
 
 from drive_sync import sync_folder
-from ingest import build_index
+from ingest import build_index, get_cached_vectordb   # ← importa o getter
 from rag import answer
 
 
 st.set_page_config(page_title="Planejador de Dieta (RAG)", layout="wide")
+
+# ──────────────────────────────────────────────────────────────
+# Versão do índice: incrementada a cada "Recriar índice".
+# Fica no session_state (por usuário), mas o vectordb fica no
+# cache do servidor (compartilhado e persistente entre reruns).
+# ──────────────────────────────────────────────────────────────
+if "index_version" not in st.session_state:
+    st.session_state["index_version"] = 0
 
 # ==============================
 # CSS global
@@ -47,7 +55,7 @@ st.markdown("""
   }
 
   .info-text {
-    font-size: 1.0rem;      /* equivalente a ~12pt no Word */
+    font-size: 1.0rem;
     line-height: 1.6;
     color: #222;
     margin: 0.3rem 0;
@@ -65,7 +73,7 @@ def img_b64(filename: str) -> str:
     return ""
 
 # ==============================
-# Banner — 40% da largura, centralizado
+# Banner
 # ==============================
 banner_b64 = img_b64("banner.png")
 if banner_b64:
@@ -103,9 +111,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ==============================
-# Assinatura — tamanho ~12pt
-# ==============================
 st.markdown("""
 <p class="info-text" style="margin-bottom:0.8rem;">
   <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
@@ -117,18 +122,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================
-# Texto explicativo RAG + link embeddings
+# Texto explicativo RAG + embeddings
 # ==============================
-
 def _html_com_imagens_embutidas(html_path: Path) -> str:
-    """Lê o HTML e substitui src de imagens locais por base64."""
     import re
     html = html_path.read_text(encoding="utf-8", errors="replace")
     assets_dir = html_path.parent
 
     def substituir(match):
         src = match.group(1)
-        # só processa caminhos relativos (não http)
         if src.startswith("http"):
             return match.group(0)
         img_path = assets_dir / src
@@ -181,24 +183,35 @@ with st.sidebar:
         st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
 
     if st.button("2) Recriar índice (embeddings)"):
+        # Incrementa a versão para invalidar o slot de cache anterior
+        new_version = st.session_state["index_version"] + 1
         with st.spinner("Indexando..."):
-            n, vectordb = build_index("data/raw_docs", "data/chroma_db", in_memory=True)
+            n, vectordb = build_index(
+                "data/raw_docs",
+                "data/chroma_db",
+                in_memory=True,
+                cache_version=new_version,   # ← registra com nova versão
+            )
             if vectordb is not None:
-                st.session_state["vectordb"] = vectordb
-                st.success(f"Índice criado com {n} trechos.")
+                st.session_state["index_version"] = new_version
+                st.success(f"Índice criado com {n} trechos. ✅ Persistido no cache do servidor.")
             else:
                 st.error("Nenhum documento encontrado em data/raw_docs. Sincronize primeiro.")
 
-    if "vectordb" in st.session_state and st.session_state["vectordb"] is not None:
-        st.info("✅ Índice carregado na sessão atual.")
+    # Mostra status usando o cache, não o session_state
+    current_version = st.session_state["index_version"]
+    vectordb_cached = get_cached_vectordb(current_version)
+
+    if current_version > 0 and vectordb_cached is not None:
+        st.info("✅ Índice carregado e persistido (não precisa reindexar ao navegar).")
     else:
         st.warning("⚠️ Índice não carregado. Execute os passos 1 e 2 acima.")
 
+
 # ==============================
-# Componente de voz (reutilizável)
+# Componente de voz
 # ==============================
 def mic_component(target_label: str, field_index: int):
-    """Injeta botão de microfone que preenche o textarea pelo índice."""
     key = f"mic_{field_index}"
     components.html(f"""
     <style>
@@ -305,11 +318,11 @@ q = st.text_area(
 )
 
 # ==============================
-# Resposta (sem cache — Chroma não é serializável pelo st.cache_data)
+# Busca o vectordb do cache do servidor (não do session_state)
 # ==============================
-def cached_answer(q, patient, k):
-    vectordb = st.session_state.get("vectordb", None)
-    return answer(q, patient, k=k, vectordb=vectordb)
+def get_vectordb_for_query():
+    version = st.session_state.get("index_version", 0)
+    return get_cached_vectordb(version)
 
 # ==============================
 # Botões
@@ -320,6 +333,8 @@ with col_btn1:
 with col_btn2:
     if st.button("🗑️ Limpar cache"):
         st.cache_data.clear()
+        st.cache_resource.clear()
+        st.session_state["index_version"] = 0
         st.success("Cache limpo!")
 
 # ==============================
@@ -331,7 +346,8 @@ if gerar:
     else:
         with st.spinner("Buscando nos documentos e gerando resposta..."):
             patient_short = patient[:2000]
-            resp, hits = cached_answer(q, patient_short, 3)
+            vectordb = get_vectordb_for_query()
+            resp, hits = answer(q, patient_short, k=3, vectordb=vectordb)
 
         col1, col2 = st.columns([2, 1])
 
