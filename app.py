@@ -18,7 +18,7 @@ try:
 except Exception:
     pass
 
-from drive_sync import sync_folder
+from drive_sync import sync_folder, download_index_from_drive, upload_index_to_drive
 from ingest import build_index
 from rag import answer
 
@@ -94,6 +94,30 @@ def load_vectordb_from_disk():
         embedding_function=embeddings,
         collection_name=COLLECTION_NAME,
     )
+
+
+# ==============================
+# Auto-restauração do índice após sleep do Streamlit
+# Roda uma única vez por sessão (cache_resource garante isso).
+# Se o chroma_db local estiver ausente, tenta baixar do Drive.
+# ==============================
+@st.cache_resource(show_spinner=False)
+def _auto_restore_index() -> str:
+    db_path = Path(DB_DIR)
+    already_local = db_path.exists() and any(db_path.iterdir())
+    if already_local:
+        return "local"
+
+    folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
+    if not folder_id:
+        return "no_folder_id"
+
+    print("[Init] Índice local não encontrado. Tentando restaurar do Drive...")
+    ok = download_index_from_drive(DB_DIR, folder_id)
+    return "restored" if ok else "not_found"
+
+
+_restore_status = _auto_restore_index()
 
 # ==============================
 # Banner — 40% da largura, centralizado
@@ -200,29 +224,47 @@ st.divider()
 # ==============================
 with st.sidebar:
     st.header("Base de conhecimento (Google Drive)")
-    folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
-    st.text_input("Folder ID", value=folder_id, key="folder_id")
 
-    if st.button("1) Sincronizar arquivos do Drive"):
-        with st.spinner("Baixando..."):
-            files = sync_folder(st.session_state.folder_id, "data/raw_docs")
-        st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
+    # ── Status da restauração automática ──
+    if _restore_status == "restored":
+        st.success("✅ Índice restaurado automaticamente do Drive.")
+    elif _restore_status == "not_found":
+        st.warning("⚠️ Nenhum índice no Drive. Use os botões abaixo para criar.")
+    elif _restore_status == "local":
+        st.info("📦 Índice carregado do disco local.")
 
-    if st.button("2) Recriar índice (embeddings)"):
-        with st.spinner("Indexando..."):
-            n, vectordb = build_index("data/raw_docs", DB_DIR)
-            if vectordb is not None:
-                # Invalida o cache para que load_vectordb_from_disk() releia o disco
-                st.cache_resource.clear()
-                st.success(f"Índice criado com {n} trechos.")
-            else:
-                st.error("Nenhum documento encontrado em data/raw_docs. Sincronize primeiro.")
+    admin_pass = st.text_input("Senha admin", type="password")
+    is_admin = admin_pass == st.secrets.get("ADMIN_PASSWORD", "")
 
-    # Status: verifica se o índice existe no disco
-    if Path(DB_DIR).exists():
-        st.info("✅ Índice disponível em disco.")
+    if is_admin:
+        folder_id = os.getenv("GDRIVE_FOLDER_ID", "")
+        st.text_input("Folder ID", value=folder_id, key="folder_id")
+
+        if st.button("1) Sincronizar arquivos do Drive"):
+            with st.spinner("Baixando..."):
+                files = sync_folder(st.session_state.folder_id, "data/raw_docs")
+            st.success(f"Baixados {len(files)} arquivos para data/raw_docs")
+
+        if st.button("2) Recriar índice (embeddings)"):
+            with st.spinner("Indexando e salvando no Drive..."):
+                n, vectordb = build_index(
+                    "data/raw_docs",
+                    DB_DIR,
+                    gdrive_folder_id=st.session_state.folder_id,
+                )
+                if vectordb is not None:
+                    st.cache_resource.clear()
+                    st.success(f"✅ Índice criado com {n} trechos e salvo no Drive.")
+                else:
+                    st.error("Nenhum documento encontrado em data/raw_docs. Sincronize primeiro.")
+
+        if Path(DB_DIR).exists():
+            st.info("✅ Índice disponível em disco.")
+        else:
+            st.warning("⚠️ Índice não encontrado. Execute os passos 1 e 2 acima.")
     else:
-        st.warning("⚠️ Índice não encontrado. Execute os passos 1 e 2 acima.")
+        if admin_pass:
+            st.error("Senha incorreta")
 
 # ==============================
 # Componente de voz (reutilizável)

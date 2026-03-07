@@ -17,7 +17,11 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
-from docx import Document as DocxDocument
+
+try:
+    from langchain_community.document_loaders import UnstructuredWordDocumentLoader
+except Exception:
+    UnstructuredWordDocumentLoader = None  # type: ignore
 
 load_dotenv()
 
@@ -31,21 +35,10 @@ def _load_pdf(path: Path) -> List[Document]:
 
 
 def _load_docx(path: Path) -> List[Document]:
-    doc = DocxDocument(str(path))
-    parts: List[str] = []
-    for p in doc.paragraphs:
-        t = (p.text or "").strip()
-        if t:
-            parts.append(t)
-    for table in doc.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-            if cells:
-                parts.append(" | ".join(cells))
-    text = "\n".join(parts).strip()
-    if not text:
+    if UnstructuredWordDocumentLoader is None:
+        print(f"[AVISO] Pulando DOCX (loader indisponível): {path}")
         return []
-    return [Document(page_content=text, metadata={"source": str(path), "page": "DOCX"})]
+    return UnstructuredWordDocumentLoader(str(path)).load()
 
 
 def load_file(path: Path) -> List[Document]:
@@ -82,6 +75,7 @@ def build_index(
     chunk_overlap: int = 150,
     batch_size: int = 50,
     batch_delay: float = 12.0,
+    gdrive_folder_id: str = "",   # ← NOVO: se informado, salva índice no Drive após indexar
 ) -> Tuple[int, Optional[Chroma]]:
     """
     Indexa os documentos, persiste em disco e retorna (n_chunks, vectordb).
@@ -139,6 +133,20 @@ def build_index(
         print(f"Arquivos ignorados/erro: {len(skipped)}")
 
     print(f"Sucesso! {len(chunks)} trechos indexados em {total_batches} lote(s).")
+
+    # ── NOVO: salva índice no Drive para sobreviver ao sleep do Streamlit ──
+    if gdrive_folder_id:
+        print("[Drive] Salvando índice no Google Drive...")
+        try:
+            from drive_sync import upload_index_to_drive
+            ok = upload_index_to_drive(db_dir, gdrive_folder_id)
+            if ok:
+                print("[Drive] Índice salvo com sucesso.")
+            else:
+                print("[Drive] Falha ao salvar índice (verifique permissões).")
+        except Exception as e:
+            print(f"[Drive] Erro ao salvar índice: {e}")
+
     return len(chunks), vectordb
 
 

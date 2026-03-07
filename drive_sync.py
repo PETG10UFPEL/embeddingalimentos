@@ -6,7 +6,12 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",  # permite criar/atualizar arquivos
+]
+
+INDEX_FOLDER_NAME = "_chroma_index"
 
 # Caminho para o JSON de service account local (desenvolvimento)
 # Coloque o arquivo em .streamlit/service_account.json  OU  defina a variável
@@ -96,3 +101,152 @@ def sync_folder(folder_id: str, out_dir: str) -> list[Path]:
         downloaded.append(dest)
 
     return downloaded
+
+
+# ==============================
+# FUNÇÕES DE PERSISTÊNCIA DO ÍNDICE
+# ==============================
+
+def _get_drive_service_rw():
+    """Serviço com permissão de leitura e escrita (drive.file)."""
+    info = _load_service_account_info()
+    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    return build("drive", "v3", credentials=creds)
+
+
+def _list_children(service, folder_id: str) -> list:
+    """Lista itens diretamente dentro de folder_id (com paginação)."""
+    q = f"'{folder_id}' in parents and trashed = false"
+    items, page_token = [], None
+    while True:
+        resp = service.files().list(
+            q=q,
+            fields="nextPageToken, files(id, name, mimeType)",
+            pageToken=page_token,
+        ).execute()
+        items.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return items
+
+
+def _get_or_create_index_folder(service, parent_folder_id: str) -> str:
+    """Retorna o ID da pasta '_chroma_index', criando se não existir."""
+    q = (
+        f"'{parent_folder_id}' in parents "
+        f"and name = '{INDEX_FOLDER_NAME}' "
+        f"and mimeType = 'application/vnd.google-apps.folder' "
+        f"and trashed = false"
+    )
+    resp = service.files().list(q=q, fields="files(id)").execute()
+    folders = resp.get("files", [])
+    if folders:
+        return folders[0]["id"]
+
+    folder_meta = {
+        "name": INDEX_FOLDER_NAME,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_folder_id],
+    }
+    folder = service.files().create(body=folder_meta, fields="id").execute()
+    print(f"[Drive] Pasta '{INDEX_FOLDER_NAME}' criada no Drive.")
+    return folder["id"]
+
+
+def upload_index_to_drive(db_dir: str, gdrive_folder_id: str) -> bool:
+    """
+    Faz upload de todos os arquivos do diretório db_dir
+    para a pasta '_chroma_index' no Google Drive.
+    Retorna True em caso de sucesso.
+    """
+    from googleapiclient.http import MediaFileUpload
+
+    db_path = Path(db_dir)
+    if not db_path.exists():
+        print(f"[ERRO] Pasta do índice não existe: {db_path}")
+        return False
+
+    files_to_upload = [f for f in db_path.rglob("*") if f.is_file()]
+    if not files_to_upload:
+        print("[AVISO] Nenhum arquivo encontrado para upload.")
+        return False
+
+    try:
+        service = _get_drive_service_rw()
+        index_folder_id = _get_or_create_index_folder(service, gdrive_folder_id)
+
+        existing = {
+            f["name"]: f["id"]
+            for f in _list_children(service, index_folder_id)
+            if f.get("mimeType") != "application/vnd.google-apps.folder"
+        }
+
+        for file_path in files_to_upload:
+            name = file_path.name
+            media = MediaFileUpload(str(file_path), resumable=False)
+            if name in existing:
+                service.files().update(fileId=existing[name], media_body=media).execute()
+            else:
+                service.files().create(
+                    body={"name": name, "parents": [index_folder_id]},
+                    media_body=media,
+                    fields="id",
+                ).execute()
+
+        print(f"[Drive] Índice salvo: {len(files_to_upload)} arquivo(s) em '{INDEX_FOLDER_NAME}'.")
+        return True
+
+    except Exception as e:
+        print(f"[ERRO] Falha ao salvar índice no Drive: {e}")
+        return False
+
+
+def download_index_from_drive(db_dir: str, gdrive_folder_id: str) -> bool:
+    """
+    Baixa os arquivos da pasta '_chroma_index' do Drive para db_dir.
+    Retorna True se o índice existia e foi baixado com sucesso.
+    """
+    try:
+        service = get_drive_service()  # somente leitura é suficiente para baixar
+
+        q = (
+            f"'{gdrive_folder_id}' in parents "
+            f"and name = '{INDEX_FOLDER_NAME}' "
+            f"and mimeType = 'application/vnd.google-apps.folder' "
+            f"and trashed = false"
+        )
+        resp = service.files().list(q=q, fields="files(id)").execute()
+        folders = resp.get("files", [])
+
+        if not folders:
+            print("[Drive] Pasta '_chroma_index' não encontrada no Drive.")
+            return False
+
+        index_folder_id = folders[0]["id"]
+        items = _list_children(service, index_folder_id)
+
+        if not items:
+            print("[Drive] Pasta '_chroma_index' está vazia.")
+            return False
+
+        db_path = Path(db_dir)
+        db_path.mkdir(parents=True, exist_ok=True)
+
+        for item in items:
+            if item.get("mimeType") == "application/vnd.google-apps.folder":
+                continue
+            dest = db_path / item["name"]
+            request = service.files().get_media(fileId=item["id"])
+            with open(dest, "wb") as fh:
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk()
+
+        print(f"[Drive] Índice baixado: {len(items)} arquivo(s) para '{db_path}'.")
+        return True
+
+    except Exception as e:
+        print(f"[ERRO] Falha ao baixar índice do Drive: {e}")
+        return False
