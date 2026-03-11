@@ -430,3 +430,5 @@ if gerar:
                     st.write(f"- {src} | {page}")
             else:
                 st.info("Nenhuma fonte indexada utilizada â€” resposta baseada em conhecimento geral.")
+
+# teste de atualização
