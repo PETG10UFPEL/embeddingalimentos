@@ -25,7 +25,7 @@ from rag import answer
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
 
-DB_DIR         = "data/chroma_db"
+DB_DIR          = "data/chroma_db"
 COLLECTION_NAME = "diet_knowledge"
 
 
@@ -71,35 +71,12 @@ def img_b64(filename: str) -> str:
     return ""
 
 # ==============================
-# Carrega o vectordb do disco (uma vez por sessão)
-# ==============================
-@st.cache_resource
-def load_vectordb_from_disk():
-    """
-    Lê o índice já persistido em data/chroma_db/.
-    Retorna None se ainda não foi criado.
-    Sobrevive a reruns sem reindexar.
-    """
-    if not Path(DB_DIR).exists():
-        return None
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        return None
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
-        google_api_key=api_key,
-    )
-    return Chroma(
-        persist_directory=DB_DIR,
-        embedding_function=embeddings,
-        collection_name=COLLECTION_NAME,
-    )
-
-
-# ==============================
 # Auto-restauração do índice após sleep do Streamlit
 # Roda uma única vez por sessão (cache_resource garante isso).
 # Se o chroma_db local estiver ausente, tenta baixar do Drive.
+# CORREÇÃO: esta função deve rodar ANTES de load_vectordb_from_disk,
+# e load_vectordb_from_disk deve chamá-la internamente para garantir
+# a ordem de execução mesmo após st.cache_resource.clear().
 # ==============================
 @st.cache_resource(show_spinner=False)
 def _auto_restore_index() -> str:
@@ -115,6 +92,42 @@ def _auto_restore_index() -> str:
     print("[Init] Índice local não encontrado. Tentando restaurar do Drive...")
     ok = download_index_from_drive(DB_DIR, folder_id)
     return "restored" if ok else "not_found"
+
+
+# ==============================
+# Carrega o vectordb do disco (uma vez por sessão)
+# CORREÇÃO: chama _auto_restore_index() internamente para garantir
+# que o download do Drive sempre precede a leitura do disco,
+# independentemente da ordem de execução dos cache_resource.
+# ==============================
+@st.cache_resource
+def load_vectordb_from_disk():
+    """
+    Garante a restauração do Drive antes de ler o disco,
+    depois carrega o índice Chroma persistido em data/chroma_db/.
+    Retorna None se o índice ainda não foi criado.
+    Sobrevive a reruns sem reindexar.
+    """
+    # Garante que o download do Drive (se necessário) ocorreu antes
+    # de tentarmos abrir o ChromaDB. Como _auto_restore_index também
+    # é cache_resource, ela não faz download duas vezes — só garante
+    # a ordem correta de execução.
+    _auto_restore_index()
+
+    if not Path(DB_DIR).exists():
+        return None
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/gemini-embedding-001",
+        google_api_key=api_key,
+    )
+    return Chroma(
+        persist_directory=DB_DIR,
+        embedding_function=embeddings,
+        collection_name=COLLECTION_NAME,
+    )
 
 
 _restore_status = _auto_restore_index()
@@ -253,7 +266,9 @@ with st.sidebar:
                     gdrive_folder_id=st.session_state.folder_id,
                 )
                 if vectordb is not None:
-                    st.cache_resource.clear()
+                    # CORREÇÃO: limpa apenas o cache do vectordb,
+                    # não o da restauração automática (_auto_restore_index).
+                    load_vectordb_from_disk.clear()
                     st.success(f"✅ Índice criado com {n} trechos e salvo no Drive.")
                 else:
                     st.error("Nenhum documento encontrado em data/raw_docs. Sincronize primeiro.")
@@ -383,7 +398,9 @@ with col_btn1:
     gerar = st.button("🚀 Gerar resposta", type="primary")
 with col_btn2:
     if st.button("🗑️ Limpar cache"):
-        st.cache_resource.clear()
+        # CORREÇÃO: limpa apenas o cache do vectordb, preservando
+        # o cache da restauração automática para não redownlodar do Drive.
+        load_vectordb_from_disk.clear()
         st.success("Cache limpo!")
 
 # ==============================
