@@ -1,128 +1,67 @@
 import os
-import json
+import io
 import streamlit as st
 from pathlib import Path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/drive.file",  # permite criar/atualizar arquivos
+    "https://www.googleapis.com/auth/drive",  # leitura + escrita; usa cota do dono da pasta
 ]
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
+# Nome da pasta onde o índice Chroma será salvo no Drive
 INDEX_FOLDER_NAME = "_chroma_index"
-
-# Caminho para o JSON de service account local (desenvolvimento)
-# Coloque o arquivo em .streamlit/service_account.json  OU  defina a variável
-# de ambiente GOOGLE_SERVICE_ACCOUNT_JSON com o conteúdo JSON como string.
-LOCAL_SA_PATHS = [
-    Path(__file__).parent / ".streamlit" / "service_account.json",
-    Path(__file__).parent / "service_account.json",
-]
-
-
-def _load_service_account_info() -> dict:
-    """
-    Tenta carregar as credenciais na seguinte ordem de prioridade:
-    1. st.secrets["gcp_service_account"]  (Streamlit Cloud)
-    2. Variável de ambiente GOOGLE_SERVICE_ACCOUNT_JSON  (string JSON)
-    3. Arquivo local service_account.json  (desenvolvimento)
-    """
-    # 1. Streamlit Cloud secrets
-    try:
-        info = st.secrets["gcp_service_account"]
-        return dict(info)
-    except Exception:
-        pass
-
-    # 2. Variável de ambiente com o JSON completo como string
-    env_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if env_json.strip():
-        try:
-            return json.loads(env_json)
-        except json.JSONDecodeError as e:
-            raise RuntimeError(
-                "GOOGLE_SERVICE_ACCOUNT_JSON contém JSON inválido."
-            ) from e
-
-    # 3. Arquivo JSON local
-    for p in LOCAL_SA_PATHS:
-        if p.exists():
-            with open(p, encoding="utf-8") as f:
-                return json.load(f)
-
-    raise RuntimeError(
-        "Credenciais do Google Drive não encontradas.\n\n"
-        "Para rodar localmente, escolha UMA das opções:\n"
-        "  a) Salve o JSON da service account em:\n"
-        "       .streamlit/service_account.json\n"
-        "  b) Defina a variável de ambiente:\n"
-        "       GOOGLE_SERVICE_ACCOUNT_JSON='{...json...}'\n\n"
-        "Para o Streamlit Cloud, configure st.secrets['gcp_service_account']."
-    )
 
 
 def get_drive_service():
-    info = _load_service_account_info()
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    """
+    Autentica no Google Drive de forma flexível:
+    1. Tenta usar st.secrets (Streamlit Cloud)
+    2. Tenta carregar o arquivo JSON local definido em variáveis de ambiente
+    3. Tenta procurar o arquivo JSON padrão na pasta raiz
+    """
+    creds = None
+
+    # 1) Streamlit Secrets (Produção)
+    try:
+        if "gcp_service_account" in st.secrets:
+            info = st.secrets["gcp_service_account"]
+            creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    except Exception:
+        pass
+
+    # 2) Arquivo Local (Desenvolvimento)
+    if not creds:
+        json_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "disco-retina-371501-525385725005.json")
+        if os.path.exists(json_path):
+            creds = service_account.Credentials.from_service_account_file(json_path, scopes=SCOPES)
+
+    if not creds:
+        raise RuntimeError(
+            "Credenciais do Google Cloud não encontradas. "
+            "Configure 'gcp_service_account' nos Secrets do Streamlit ou tenha o arquivo JSON localmente."
+        )
+
     return build("drive", "v3", credentials=creds)
 
 
-def sync_folder(folder_id: str, out_dir: str) -> list[Path]:
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    service = get_drive_service()
-
-    q = f"'{folder_id}' in parents and trashed = false"
-    results = service.files().list(
-        q=q, fields="files(id, name, mimeType, modifiedTime)"
-    ).execute()
-    files = results.get("files", [])
-
-    downloaded = []
-    for f in files:
-        name = f["name"]
-        file_id = f["id"]
-        mime = f["mimeType"]
-
-        if mime.startswith("application/vnd.google-apps"):
-            continue
-
-        dest = out / name
-        request = service.files().get_media(fileId=file_id)
-
-        with open(dest, "wb") as fh:
-            downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
-
-        downloaded.append(dest)
-
-    return downloaded
-
-
-# ==============================
-# FUNÇÕES DE PERSISTÊNCIA DO ÍNDICE
-# ==============================
-
-def _get_drive_service_rw():
-    """Serviço com permissão de leitura e escrita (drive.file)."""
-    info = _load_service_account_info()
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-    return build("drive", "v3", credentials=creds)
-
-
-def _list_children(service, folder_id: str) -> list:
+def _list_children(service, folder_id: str):
     """Lista itens diretamente dentro de folder_id (com paginação)."""
     q = f"'{folder_id}' in parents and trashed = false"
-    items, page_token = [], None
+    items = []
+    page_token = None
     while True:
         resp = service.files().list(
             q=q,
-            fields="nextPageToken, files(id, name, mimeType)",
+            fields="nextPageToken, files(id, name, mimeType, size)",
             pageToken=page_token,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         ).execute()
         items.extend(resp.get("files", []))
         page_token = resp.get("nextPageToken")
@@ -131,36 +70,122 @@ def _list_children(service, folder_id: str) -> list:
     return items
 
 
+def _download_file(service, file_id: str, dest: Path):
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    request = service.files().get_media(fileId=file_id)
+    with open(dest, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
+
+def _sync_folder_recursive(service, folder_id: str, out_root: Path, rel: Path = Path(".")) -> list[Path]:
+    """Sincroniza recursivamente: percorre subpastas e baixa arquivos preservando a estrutura."""
+    downloaded: list[Path] = []
+    items = _list_children(service, folder_id)
+
+    for it in items:
+        name = it["name"]
+        mime = it.get("mimeType", "")
+        it_id = it["id"]
+
+        if mime == FOLDER_MIME:
+            downloaded.extend(_sync_folder_recursive(service, it_id, out_root, rel / name))
+            continue
+
+        if mime.startswith("application/vnd.google-apps"):
+            continue
+
+        dest = out_root / rel / name
+
+        if not dest.exists():
+            _download_file(service, it_id, dest)
+            downloaded.append(dest)
+
+    return downloaded
+
+
+def sync_folder(folder_id: str, out_dir: str, recursive: bool = True) -> list[Path]:
+    """
+    Sincroniza uma pasta do Google Drive com um diretório local.
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    try:
+        service = get_drive_service()
+
+        if recursive:
+            downloaded = _sync_folder_recursive(service, folder_id, out, Path("."))
+        else:
+            downloaded = []
+            items = _list_children(service, folder_id)
+            for f in items:
+                name = f["name"]
+                file_id = f["id"]
+                mime = f.get("mimeType", "")
+
+                if mime == FOLDER_MIME or mime.startswith("application/vnd.google-apps"):
+                    continue
+
+                dest = out / name
+                if not dest.exists():
+                    _download_file(service, file_id, dest)
+                    downloaded.append(dest)
+
+        print(f"Baixados {len(downloaded)} arquivos para {out.resolve()}")
+        return downloaded
+
+    except Exception as e:
+        print(f"Erro na sincronização: {e}")
+        return []
+
+
+# ==============================
+# FUNÇÕES DE PERSISTÊNCIA DO ÍNDICE
+# ==============================
+
 def _get_or_create_index_folder(service, parent_folder_id: str) -> str:
-    """Retorna o ID da pasta '_chroma_index', criando se não existir."""
+    """
+    Retorna o ID da pasta '_chroma_index' dentro de parent_folder_id.
+    Cria a pasta se não existir.
+    """
     q = (
         f"'{parent_folder_id}' in parents "
         f"and name = '{INDEX_FOLDER_NAME}' "
         f"and mimeType = 'application/vnd.google-apps.folder' "
         f"and trashed = false"
     )
-    resp = service.files().list(q=q, fields="files(id)").execute()
-    folders = resp.get("files", [])
-    if folders:
-        return folders[0]["id"]
+    resp = service.files().list(q=q, fields="files(id, name)").execute()
+    files = resp.get("files", [])
 
+    if files:
+        return files[0]["id"]
+
+    # Cria a pasta
     folder_meta = {
         "name": INDEX_FOLDER_NAME,
         "mimeType": "application/vnd.google-apps.folder",
         "parents": [parent_folder_id],
     }
-    folder = service.files().create(body=folder_meta, fields="id").execute()
+    folder = service.files().create(
+        body=folder_meta,
+        fields="id",
+        supportsAllDrives=True,
+    ).execute()
     print(f"[Drive] Pasta '{INDEX_FOLDER_NAME}' criada no Drive.")
     return folder["id"]
 
 
 def upload_index_to_drive(db_dir: str, gdrive_folder_id: str) -> bool:
     """
-    Faz upload de todos os arquivos do diretório db_dir
-    para a pasta '_chroma_index' no Google Drive.
+    Compacta o índice Chroma em um único ZIP e faz upload para o Google Drive.
+    Usar um arquivo único evita o erro 403 de cota de Service Accounts.
     Retorna True em caso de sucesso.
     """
-    from googleapiclient.http import MediaFileUpload
+    import zipfile
+    import tempfile
 
     db_path = Path(db_dir)
     if not db_path.exists():
@@ -173,28 +198,47 @@ def upload_index_to_drive(db_dir: str, gdrive_folder_id: str) -> bool:
         return False
 
     try:
-        service = _get_drive_service_rw()
-        index_folder_id = _get_or_create_index_folder(service, gdrive_folder_id)
+        # Cria ZIP temporário com todos os arquivos do índice
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            zip_path = Path(tmp.name)
 
-        existing = {
-            f["name"]: f["id"]
-            for f in _list_children(service, index_folder_id)
-            if f.get("mimeType") != "application/vnd.google-apps.folder"
-        }
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file_path in files_to_upload:
+                zf.write(file_path, file_path.relative_to(db_path))
 
-        for file_path in files_to_upload:
-            name = file_path.name
-            media = MediaFileUpload(str(file_path), resumable=False)
-            if name in existing:
-                service.files().update(fileId=existing[name], media_body=media).execute()
-            else:
-                service.files().create(
-                    body={"name": name, "parents": [index_folder_id]},
-                    media_body=media,
-                    fields="id",
-                ).execute()
+        print(f"[Drive] ZIP criado: {zip_path.stat().st_size // 1024} KB")
 
-        print(f"[Drive] Índice salvo: {len(files_to_upload)} arquivo(s) em '{INDEX_FOLDER_NAME}'.")
+        service = get_drive_service()
+
+        # Busca arquivo ZIP existente na pasta pai (não em subpasta)
+        zip_name = "chroma_index.zip"
+        q = (
+            f"'{gdrive_folder_id}' in parents "
+            f"and name = '{zip_name}' "
+            f"and trashed = false"
+        )
+        resp = service.files().list(q=q, fields="files(id)").execute()
+        existing = resp.get("files", [])
+
+        media = MediaFileUpload(str(zip_path), mimetype="application/zip", resumable=False)
+
+        if existing:
+            # Atualiza arquivo existente — usa cota do dono da pasta
+            service.files().update(
+                fileId=existing[0]["id"],
+                media_body=media,
+            ).execute()
+            print(f"[Drive] ZIP atualizado: '{zip_name}'.")
+        else:
+            # Cria novo arquivo na pasta do usuário
+            service.files().create(
+                body={"name": zip_name, "parents": [gdrive_folder_id]},
+                media_body=media,
+                fields="id",
+            ).execute()
+            print(f"[Drive] ZIP criado no Drive: '{zip_name}'.")
+
+        zip_path.unlink(missing_ok=True)
         return True
 
     except Exception as e:
@@ -204,49 +248,68 @@ def upload_index_to_drive(db_dir: str, gdrive_folder_id: str) -> bool:
 
 def download_index_from_drive(db_dir: str, gdrive_folder_id: str) -> bool:
     """
-    Baixa os arquivos da pasta '_chroma_index' do Drive para db_dir.
+    Baixa o ZIP do índice Chroma do Drive e extrai para db_dir.
     Retorna True se o índice existia e foi baixado com sucesso.
     """
-    try:
-        service = get_drive_service()  # somente leitura é suficiente para baixar
+    import zipfile
+    import tempfile
 
+    try:
+        service = get_drive_service()
+        zip_name = "chroma_index.zip"
+
+        # Busca o ZIP na pasta pai
         q = (
             f"'{gdrive_folder_id}' in parents "
-            f"and name = '{INDEX_FOLDER_NAME}' "
-            f"and mimeType = 'application/vnd.google-apps.folder' "
+            f"and name = '{zip_name}' "
             f"and trashed = false"
         )
-        resp = service.files().list(q=q, fields="files(id)").execute()
-        folders = resp.get("files", [])
+        resp = service.files().list(q=q, fields="files(id, name)").execute()
+        files = resp.get("files", [])
 
-        if not folders:
-            print("[Drive] Pasta '_chroma_index' não encontrada no Drive.")
+        if not files:
+            print("[Drive] Arquivo 'chroma_index.zip' não encontrado no Drive.")
             return False
 
-        index_folder_id = folders[0]["id"]
-        items = _list_children(service, index_folder_id)
+        # Baixa o ZIP para arquivo temporário
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            zip_path = Path(tmp.name)
 
-        if not items:
-            print("[Drive] Pasta '_chroma_index' está vazia.")
-            return False
+        _download_file(service, files[0]["id"], zip_path)
+        print(f"[Drive] ZIP baixado: {zip_path.stat().st_size // 1024} KB")
 
+        # Extrai para db_dir
         db_path = Path(db_dir)
         db_path.mkdir(parents=True, exist_ok=True)
 
-        for item in items:
-            if item.get("mimeType") == "application/vnd.google-apps.folder":
-                continue
-            dest = db_path / item["name"]
-            request = service.files().get_media(fileId=item["id"])
-            with open(dest, "wb") as fh:
-                downloader = MediaIoBaseDownload(fh, request)
-                done = False
-                while not done:
-                    _, done = downloader.next_chunk()
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(db_path)
 
-        print(f"[Drive] Índice baixado: {len(items)} arquivo(s) para '{db_path}'.")
+        zip_path.unlink(missing_ok=True)
+        print(f"[Drive] Índice extraído para '{db_path}'.")
         return True
 
     except Exception as e:
         print(f"[ERRO] Falha ao baixar índice do Drive: {e}")
         return False
+
+
+def index_exists_on_drive(gdrive_folder_id: str) -> bool:
+    """
+    Verifica rapidamente se o ZIP do índice existe no Drive (sem baixar).
+    """
+    try:
+        service = get_drive_service()
+        q = (
+            f"'{gdrive_folder_id}' in parents "
+            f"and name = 'chroma_index.zip' "
+            f"and trashed = false"
+        )
+        resp = service.files().list(q=q, fields="files(id)").execute()
+        return len(resp.get("files", [])) > 0
+    except Exception:
+        return False
+
+
+if __name__ == "__main__":
+    pass
