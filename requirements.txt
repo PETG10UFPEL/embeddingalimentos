@@ -3,6 +3,7 @@ numpy==1.26.4
 pydantic
 pypdf
 ftfy
+unstructured
 google-api-python-client
 google-auth
 google-auth-httplib2
@@ -11,6 +12,7 @@ langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-huggingface>=0.1.0
 langchain-groq>=0.1.0
+langchain-chroma>=0.1.0
 sentence-transformers>=3.0.0
 chromadb>=0.5.0
 python-docx

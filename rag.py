@@ -23,7 +23,7 @@ import functools
 from typing import Tuple, List, Optional
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 DB_DIR_DEFAULT      = "data/chroma_db"
 COLLECTION_NAME     = "diet_knowledge"

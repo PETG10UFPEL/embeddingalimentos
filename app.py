@@ -21,7 +21,7 @@ from ingest import build_index
 from rag import answer
 
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 EMBED_MODEL = "paraphrase-multilingual-mpnet-base-v2"
 
@@ -29,7 +29,7 @@ DB_DIR          = "data/chroma_db"
 COLLECTION_NAME = "diet_knowledge"
 
 
-st.set_page_config(page_title="Planejador de Dieta (RAG)", layout="wide")
+st.set_page_config(page_title="Feridas Crônicas - PET G10 UFPel", layout="wide")
 
 # ==============================
 # CSS global
@@ -71,11 +71,12 @@ def img_b64(filename: str) -> str:
     return ""
 
 # ==============================
-# Auto-restauração do índice após sleep do Streamlit.
-# Roda UMA vez por sessão (cache_resource garante isso).
-# Se o chroma_db local estiver ausente, baixa do Drive.
-# _restore_status é executado antes de load_vectordb_from_disk
-# para garantir que o Drive foi consultado primeiro.
+# Auto-restauração do índice após sleep do Streamlit
+# Roda uma única vez por sessão (cache_resource garante isso).
+# Se o chroma_db local estiver ausente, tenta baixar do Drive.
+# CORREÇÃO: esta função deve rodar ANTES de load_vectordb_from_disk,
+# e load_vectordb_from_disk deve chamá-la internamente para garantir
+# a ordem de execução mesmo após st.cache_resource.clear().
 # ==============================
 @st.cache_resource(show_spinner=False)
 def _auto_restore_index() -> str:
@@ -93,21 +94,25 @@ def _auto_restore_index() -> str:
     return "restored" if ok else "not_found"
 
 
-# Executa a restauração ANTES de load_vectordb_from_disk ser chamado.
+# ==============================
+# Carrega o vectordb do disco (uma vez por sessão)
+# CORREÇÃO: chama _auto_restore_index() internamente para garantir
+# que o download do Drive sempre precede a leitura do disco,
+# independentemente da ordem de execução dos cache_resource.
+# ==============================
+# _restore_status executa _auto_restore_index UMA vez:
+# baixa o índice do Drive se necessário, e retorna o status para a sidebar.
 _restore_status = _auto_restore_index()
 
 
-# ==============================
-# Carrega o vectordb do disco (uma vez por sessão).
-# Depende de _restore_status já ter rodado acima,
-# garantindo que o índice do Drive foi baixado se necessário.
-# ==============================
 @st.cache_resource
 def load_vectordb_from_disk():
     """
     Carrega o índice Chroma persistido em data/chroma_db/.
     Retorna None se o índice ainda não foi criado.
     Sobrevive a reruns sem reindexar.
+    Nota: _auto_restore_index() já foi executada antes desta função
+    via _restore_status, garantindo que o Drive foi consultado primeiro.
     """
     if not Path(DB_DIR).exists():
         return None
@@ -135,7 +140,7 @@ if banner_b64:
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.title("🥗 Planejador de Dieta - Patrícia")
+    st.title("🩹 Feridas Crônicas - PET G10 UFPel")
 
 # ==============================
 # Links institucionais
@@ -167,11 +172,12 @@ st.markdown(f"""
 # ==============================
 st.markdown("""
 <p class="info-text" style="margin-bottom:0.8rem;">
-  <strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
-  Disciplina 15001103 M1 &mdash; Princípios de Inteligência Artificial Aplicados &middot;
-  UFPel (2025/6-2) &middot; Prof. Alejandro Martins R. &middot;
-  Sistema elaborado em parceria junto à P&amp;D do Projeto PET UFPel Saúde Digital &mdash;
-  Telemonitoramento de Feridas Crônicas.
+  Sistema de apoio ao ensino &amp; aprendizagem sobre <strong>Feridas Crônicas</strong> &mdash; baseado em RAG-AI
+  sobre o material das disciplinas oferecidas pela professora
+  <a href="https://institucional.ufpel.edu.br/servidores/id/2858" target="_blank">Adrize Rutz Porto</a>,
+  da Faculdade de Enfermagem &ndash; UFPel.<br>
+  Desenvolvimento conjunto em P&amp;D do Projeto
+  <a href="https://www.instagram.com/g10petsaude/" target="_blank">PET UFPel Saúde Digital</a>.
 </p>
 """, unsafe_allow_html=True)
 
@@ -213,13 +219,13 @@ st.markdown("""
 </p>
 """, unsafe_allow_html=True)
 
-_emb_path = Path(__file__).parent / "assets" / "embeddings_alimentos.html"
+_emb_path = Path(__file__).parent / "assets" / "embeddings_feridas.html"
 if _emb_path.exists():
-    with st.expander("📊 Ver Embeddings dos Alimentos", expanded=False):
+    with st.expander("📊 Ver Embeddings da Base de Conhecimento", expanded=False):
         _html_content = _html_com_imagens_embutidas(_emb_path)
         components.html(_html_content, height=700, scrolling=True)
 else:
-    st.caption("_(arquivo embeddings_alimentos.html não encontrado em assets/)_")
+    st.caption("_(arquivo embeddings_feridas.html não encontrado em assets/)_")
 
 st.divider()
 
@@ -232,15 +238,16 @@ with st.sidebar:
     # ── Status da restauração automática ──
     if _restore_status == "restored":
         st.success("✅ Índice restaurado automaticamente do Drive.")
-    elif _restore_status == "local":
-        st.info("📦 Índice carregado do disco local.")
     elif _restore_status == "not_found":
         st.error(
             "⚠️ Nenhum índice encontrado no Drive. "
-            "Faça login como admin → **1) Sincronizar** → **2) Recriar índice**."
+            "Para começar: faça login como admin → "
+            "**1) Sincronizar** → **2) Recriar índice**."
         )
+    elif _restore_status == "local":
+        st.info("📦 Índice carregado do disco local.")
     elif _restore_status == "no_folder_id":
-        st.error("⚠️ GDRIVE_FOLDER_ID não configurado nos secrets do Streamlit.")
+        st.error("⚠️ GDRIVE_FOLDER_ID não configurado nos secrets.")
 
     admin_pass = st.text_input("Senha admin", type="password")
     is_admin = admin_pass == st.secrets.get("ADMIN_PASSWORD", "")
@@ -382,7 +389,7 @@ mic_component("Pergunta / objetivo", 1)
 q = st.text_area(
     "Pergunta / objetivo",
     height=100,
-    placeholder="Ex.: sugerir plano alimentar de 7 dias, ou ajustar dieta para cicatrização, etc.",
+    placeholder="Ex.: Quais são as fases da cicatrização? Como classificar uma úlcera por pressão? Qual o curativo indicado para ferida com exsudato abundante?",
     label_visibility="collapsed",
 )
 
