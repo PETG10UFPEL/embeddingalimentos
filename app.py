@@ -29,7 +29,7 @@ DB_DIR          = "data/chroma_db"
 COLLECTION_NAME = "diet_knowledge"
 
 
-st.set_page_config(page_title="Feridas Crônicas - PET G10 UFPel", layout="wide")
+st.set_page_config(page_title="Diet - PET G10 UFPel", layout="wide")
 
 # ==============================
 # CSS global
@@ -236,16 +236,15 @@ with st.sidebar:
     st.header("Base de conhecimento (Google Drive)")
 
     # ── Status da restauração automática ──
-    if _restore_status == "restored":
-        st.success("✅ Índice restaurado automaticamente do Drive.")
+    _db_loaded = load_vectordb_from_disk() is not None
+    if _db_loaded or _restore_status in ("restored", "local"):
+        st.success("✅ Índice carregado e pronto.")
     elif _restore_status == "not_found":
         st.error(
             "⚠️ Nenhum índice encontrado no Drive. "
             "Para começar: faça login como admin → "
             "**1) Sincronizar** → **2) Recriar índice**."
         )
-    elif _restore_status == "local":
-        st.info("📦 Índice carregado do disco local.")
     elif _restore_status == "no_folder_id":
         st.error("⚠️ GDRIVE_FOLDER_ID não configurado nos secrets.")
 
