@@ -16,7 +16,7 @@ try:
 except Exception:
     pass
 
-from drive_sync import sync_folder, download_index_from_drive, upload_index_to_drive
+from drive_sync import sync_folder, download_index_from_drive
 from ingest import build_index
 from rag import answer
 
@@ -71,12 +71,11 @@ def img_b64(filename: str) -> str:
     return ""
 
 # ==============================
-# Auto-restauração do índice após sleep do Streamlit
-# Roda uma única vez por sessão (cache_resource garante isso).
-# Se o chroma_db local estiver ausente, tenta baixar do Drive.
-# CORREÇÃO: esta função deve rodar ANTES de load_vectordb_from_disk,
-# e load_vectordb_from_disk deve chamá-la internamente para garantir
-# a ordem de execução mesmo após st.cache_resource.clear().
+# Auto-restauração do índice após sleep do Streamlit.
+# Roda UMA vez por sessão (cache_resource garante isso).
+# Se o chroma_db local estiver ausente, baixa do Drive.
+# _restore_status é executado antes de load_vectordb_from_disk
+# para garantir que o Drive foi consultado primeiro.
 # ==============================
 @st.cache_resource(show_spinner=False)
 def _auto_restore_index() -> str:
@@ -94,26 +93,22 @@ def _auto_restore_index() -> str:
     return "restored" if ok else "not_found"
 
 
+# Executa a restauração ANTES de load_vectordb_from_disk ser chamado.
+_restore_status = _auto_restore_index()
+
+
 # ==============================
-# Carrega o vectordb do disco (uma vez por sessão)
-# CORREÇÃO: chama _auto_restore_index() internamente para garantir
-# que o download do Drive sempre precede a leitura do disco,
-# independentemente da ordem de execução dos cache_resource.
+# Carrega o vectordb do disco (uma vez por sessão).
+# Depende de _restore_status já ter rodado acima,
+# garantindo que o índice do Drive foi baixado se necessário.
 # ==============================
 @st.cache_resource
 def load_vectordb_from_disk():
     """
-    Garante a restauração do Drive antes de ler o disco,
-    depois carrega o índice Chroma persistido em data/chroma_db/.
+    Carrega o índice Chroma persistido em data/chroma_db/.
     Retorna None se o índice ainda não foi criado.
     Sobrevive a reruns sem reindexar.
     """
-    # Garante que o download do Drive (se necessário) ocorreu antes
-    # de tentarmos abrir o ChromaDB. Como _auto_restore_index também
-    # é cache_resource, ela não faz download duas vezes — só garante
-    # a ordem correta de execução.
-    _auto_restore_index()
-
     if not Path(DB_DIR).exists():
         return None
     # Embeddings locais — multilíngue PT/EN/ES e +50 línguas, sem API key
@@ -127,9 +122,6 @@ def load_vectordb_from_disk():
         embedding_function=embeddings,
         collection_name=COLLECTION_NAME,
     )
-
-
-_restore_status = _auto_restore_index()
 
 # ==============================
 # Banner — 40% da largura, centralizado
@@ -240,10 +232,15 @@ with st.sidebar:
     # ── Status da restauração automática ──
     if _restore_status == "restored":
         st.success("✅ Índice restaurado automaticamente do Drive.")
-    elif _restore_status == "not_found":
-        st.warning("⚠️ Nenhum índice no Drive. Use os botões abaixo para criar.")
     elif _restore_status == "local":
         st.info("📦 Índice carregado do disco local.")
+    elif _restore_status == "not_found":
+        st.error(
+            "⚠️ Nenhum índice encontrado no Drive. "
+            "Faça login como admin → **1) Sincronizar** → **2) Recriar índice**."
+        )
+    elif _restore_status == "no_folder_id":
+        st.error("⚠️ GDRIVE_FOLDER_ID não configurado nos secrets do Streamlit.")
 
     admin_pass = st.text_input("Senha admin", type="password")
     is_admin = admin_pass == st.secrets.get("ADMIN_PASSWORD", "")
