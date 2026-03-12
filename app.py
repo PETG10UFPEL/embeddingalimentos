@@ -220,13 +220,13 @@ st.markdown("""
 </p>
 """, unsafe_allow_html=True)
 
-_emb_path = Path(__file__).parent / "assets" / "embeddings_feridas.html"
+_emb_path = Path(__file__).parent / "assets" / "embeddings_alimentos.html"
 if _emb_path.exists():
     with st.expander("📊 Ver Embeddings da Base de Conhecimento", expanded=False):
         _html_content = _html_com_imagens_embutidas(_emb_path)
         components.html(_html_content, height=700, scrolling=True)
 else:
-    st.caption("_(arquivo embeddings_feridas.html não encontrado em assets/)_")
+    st.caption("_(arquivo embeddings_alimentos.html não encontrado em assets/)_")
 
 st.divider()
 
