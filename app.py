@@ -172,12 +172,13 @@ st.markdown(f"""
 # ==============================
 st.markdown("""
 <p class="info-text" style="margin-bottom:0.8rem;">
-  Sistema de apoio ao ensino &amp; aprendizagem sobre <strong>Feridas Crônicas</strong> &mdash; baseado em RAG-AI
-  sobre o material das disciplinas oferecidas pela professora
-  <a href="https://institucional.ufpel.edu.br/servidores/id/2858" target="_blank">Adrize Rutz Porto</a>,
-  da Faculdade de Enfermagem &ndash; UFPel.<br>
-  Desenvolvimento conjunto em P&amp;D do Projeto
-  <a href="https://www.instagram.com/g10petsaude/" target="_blank">PET UFPel Saúde Digital</a>.
+<strong>Patrícia Xavier Bittencourt</strong>, estudante &middot;
+  Disciplina 15001103 M1 &mdash; Princípios de Inteligência Artificial Aplicados &middot;
+  UFPel (2025/6-2) &middot; Prof. Alejandro Martins R. &middot;
+  Sistema elaborado em parceria junto à P&amp;D do Projeto PET UFPel Saúde Digital &mdash;
+  Telemonitoramento de Feridas Crônicas.
+</p>
+
 </p>
 """, unsafe_allow_html=True)
 
