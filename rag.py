@@ -2,9 +2,8 @@
 """
 Módulo de Recuperação e Resposta (RAG) para o projeto PET-Saúde G10.
 Modo híbrido: prioriza documentos indexados, complementa com conhecimento geral.
-
-MUDANÇA: answer() agora aceita um vectordb já instanciado (vindo do
-         st.session_state), evitando recriar o índice a cada chamada.
+Embeddings: HuggingFace local (sem API paga).
+LLM: Groq (gratuito, rápido, suporte a português).
 """
 
 import os
@@ -13,22 +12,22 @@ load_dotenv(override=True)
 
 try:
     import streamlit as st
-    if "GOOGLE_API_KEY" in st.secrets:
-        os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
-    if "GEMINI_MODEL" in st.secrets:
-        os.environ["GEMINI_MODEL"] = st.secrets["GEMINI_MODEL"]
+    if "GROQ_API_KEY" in st.secrets:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
 except Exception:
     pass
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 from typing import Tuple, List, Optional
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 from langchain_community.vectorstores import Chroma
 
-DB_DIR_DEFAULT   = "data/chroma_db"
-COLLECTION_NAME  = "diet_knowledge"
+DB_DIR_DEFAULT      = "data/chroma_db"
+COLLECTION_NAME     = "diet_knowledge"
 RELEVANCE_THRESHOLD = 0.4
+EMBED_MODEL         = "paraphrase-multilingual-mpnet-base-v2"
 
 SYSTEM_RULES = """Você é um assistente de planejamento alimentar clínico do projeto PET-Saúde G10, \
 especialista em nutrição clínica e dietoterapia.
@@ -46,18 +45,20 @@ MODO DE OPERAÇÃO HÍBRIDO:
 """
 
 
+def _get_embeddings() -> HuggingFaceEmbeddings:
+    """Embeddings locais — sem API key, sem cota."""
+    return HuggingFaceEmbeddings(
+        model_name=EMBED_MODEL,
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
+    )
+
+
 def _get_db_from_disk(db_dir: str = DB_DIR_DEFAULT) -> Chroma:
     """Carrega um índice já persistido em disco (uso local)."""
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY não encontrada.")
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
-        google_api_key=api_key,
-    )
     return Chroma(
         persist_directory=db_dir,
-        embedding_function=embeddings,
+        embedding_function=_get_embeddings(),
         collection_name=COLLECTION_NAME,
     )
 
@@ -66,28 +67,27 @@ def answer(
     question: str,
     patient_summary: str,
     k: int = 5,
-    vectordb: Optional[Chroma] = None,   # ← NOVO: recebe o db da sessão
+    vectordb: Optional[Chroma] = None,
 ) -> Tuple[str, List]:
     """
-    Busca nos documentos e gera resposta híbrida.
+    Busca nos documentos e gera resposta híbrida via Groq.
 
     Parâmetros:
       vectordb  – instância Chroma já criada (session_state). Se None,
                   tenta carregar do disco (modo local).
     Retorna (texto_da_resposta, lista_de_documentos_encontrados).
     """
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY não encontrada.")
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        raise RuntimeError(
+            "GROQ_API_KEY não encontrada. Configure em .streamlit/secrets.toml."
+        )
 
     # 1. Decide qual banco usar
     if vectordb is not None:
         db = vectordb
     else:
-        # Tenta carregar do disco (uso local). No Streamlit Cloud isso vai falhar
-        # se o índice não foi criado — o app.py deve sempre passar vectordb.
-        import os as _os
-        if not _os.path.exists(DB_DIR_DEFAULT):
+        if not os.path.exists(DB_DIR_DEFAULT):
             return (
                 "⚠️ Índice não encontrado. No Streamlit Cloud o índice precisa ser "
                 "criado na sessão atual: use a sidebar para **Sincronizar** e depois "
@@ -103,8 +103,8 @@ def answer(
     hits_with_score = db.similarity_search_with_relevance_scores(full_query, k=k)
 
     # 4. Filtra relevantes
-    hits      = [doc for doc, score in hits_with_score if score >= RELEVANCE_THRESHOLD]
-    all_hits  = [doc for doc, _ in hits_with_score]
+    hits     = [doc for doc, score in hits_with_score if score >= RELEVANCE_THRESHOLD]
+    all_hits = [doc for doc, _ in hits_with_score]
 
     # 5. Monta contexto
     if hits_with_score:
@@ -129,10 +129,10 @@ def answer(
             "Responda com seu conhecimento clínico em nutrição, indicando que a resposta é baseada em conhecimento geral."
         )
 
-    # 6. LLM
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL,
-        google_api_key=api_key,
+    # 6. LLM via Groq
+    llm = ChatGroq(
+        model=GROQ_MODEL,
+        groq_api_key=groq_key,
         temperature=0.2,
     )
 

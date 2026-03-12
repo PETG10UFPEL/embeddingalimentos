@@ -1,13 +1,14 @@
 # ingest.py
 """
 Indexador (RAG) para o projeto PET-Saúde G10.
-Usa Google Generative AI Embeddings (gemini-embedding-001).
+Usa HuggingFace Embeddings locais (sem API paga, sem cota).
+Modelo multilíngue: suporta PT, EN, ES e +50 línguas.
 """
 
 from __future__ import annotations
 
 import os
-import time
+import ftfy
 from pathlib import Path
 from typing import List, Tuple, Optional
 
@@ -15,7 +16,7 @@ from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
 try:
@@ -25,20 +26,54 @@ except Exception:
 
 load_dotenv()
 
-RAW_DIR_DEFAULT  = "data/raw_docs"
-DB_DIR_DEFAULT   = "data/chroma_db"
-COLLECTION_NAME  = "diet_knowledge"
+RAW_DIR_DEFAULT = "data/raw_docs"
+DB_DIR_DEFAULT  = "data/chroma_db"
+COLLECTION_NAME = "diet_knowledge"
+
+# Modelo multilíngue — roda local, sem API key, sem limite de cota
+EMBED_MODEL = "paraphrase-multilingual-mpnet-base-v2"
+
+
+def _fix_encoding(docs: List[Document]) -> List[Document]:
+    """
+    Corrige problemas de encoding em textos extraídos de PDFs e DOCX.
+    Usa ftfy para detectar e reparar bytes mal interpretados (ex: ç, ã, é
+    salvos em latin-1 mas lidos como UTF-8, comum em documentos PT-BR).
+    """
+    for doc in docs:
+        try:
+            doc.page_content = ftfy.fix_text(doc.page_content)
+        except Exception:
+            # Fallback: força re-encode latin-1 → utf-8 se ftfy falhar
+            try:
+                doc.page_content = (
+                    doc.page_content.encode("latin-1", errors="replace")
+                    .decode("utf-8", errors="replace")
+                )
+            except Exception:
+                pass
+    return docs
 
 
 def _load_pdf(path: Path) -> List[Document]:
-    return PyPDFLoader(str(path)).load()
+    try:
+        docs = PyPDFLoader(str(path)).load()
+        return _fix_encoding(docs)
+    except Exception as e:
+        print(f"[AVISO] Erro ao carregar PDF {path}: {e}")
+        return []
 
 
 def _load_docx(path: Path) -> List[Document]:
     if UnstructuredWordDocumentLoader is None:
         print(f"[AVISO] Pulando DOCX (loader indisponível): {path}")
         return []
-    return UnstructuredWordDocumentLoader(str(path)).load()
+    try:
+        docs = UnstructuredWordDocumentLoader(str(path)).load()
+        return _fix_encoding(docs)
+    except Exception as e:
+        print(f"[AVISO] Erro ao carregar DOCX {path}: {e}")
+        return []
 
 
 def load_file(path: Path) -> List[Document]:
@@ -73,18 +108,16 @@ def build_index(
     db_dir: str = DB_DIR_DEFAULT,
     chunk_size: int = 900,
     chunk_overlap: int = 150,
-    batch_size: int = 50,
-    batch_delay: float = 12.0,
-    gdrive_folder_id: str = "",   # ← NOVO: se informado, salva índice no Drive após indexar
+    gdrive_folder_id: str = "",
 ) -> Tuple[int, Optional[Chroma]]:
     """
-    Indexa os documentos, persiste em disco e retorna (n_chunks, vectordb).
-    O índice sobrevive a reruns e reinicializações do servidor.
-    """
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY não encontrada.")
+    Indexa os documentos localmente com HuggingFace (sem API paga, sem cota).
+    Suporta documentos em português, inglês e outras línguas simultaneamente.
+    Corrige automaticamente problemas de encoding em documentos PT-BR.
 
+    gdrive_folder_id — se informado, faz upload do índice ao Drive após criar,
+                       permitindo recuperar após sleep do Streamlit.
+    """
     docs, skipped = load_all_docs(raw_dir)
     if not docs:
         print(f"AVISO: Nenhum documento válido encontrado em '{raw_dir}'")
@@ -97,31 +130,21 @@ def build_index(
     )
     chunks = splitter.split_documents(docs)
 
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
-        google_api_key=api_key,
+    # Embeddings locais — sem API key, sem limite de cota
+    embeddings = HuggingFaceEmbeddings(
+        model_name=EMBED_MODEL,
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
     )
 
-    vectordb = None
-    total_batches = (len(chunks) + batch_size - 1) // batch_size
+    print(f"[OK] Gerando embeddings para {len(chunks)} chunks (modelo local)...")
 
-    for i, start in enumerate(range(0, len(chunks), batch_size)):
-        batch = chunks[start : start + batch_size]
-        print(f"Lote {i + 1}/{total_batches} — {len(batch)} chunks...")
-
-        if vectordb is None:
-            vectordb = Chroma.from_documents(
-                documents=batch,
-                embedding=embeddings,
-                persist_directory=db_dir,       # ← sempre em disco
-                collection_name=COLLECTION_NAME,
-            )
-        else:
-            vectordb.add_documents(batch)
-
-        if start + batch_size < len(chunks):
-            print(f"  Aguardando {batch_delay}s para respeitar limite da API...")
-            time.sleep(batch_delay)
+    vectordb = Chroma.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        persist_directory=db_dir,
+        collection_name=COLLECTION_NAME,
+    )
 
     # Compatibilidade com versões antigas do Chroma
     try:
@@ -132,9 +155,9 @@ def build_index(
     if skipped:
         print(f"Arquivos ignorados/erro: {len(skipped)}")
 
-    print(f"Sucesso! {len(chunks)} trechos indexados em {total_batches} lote(s).")
+    print(f"Sucesso! {len(chunks)} trechos indexados.")
 
-    # ── NOVO: salva índice no Drive para sobreviver ao sleep do Streamlit ──
+    # Salva índice no Drive para sobreviver ao sleep do Streamlit
     if gdrive_folder_id:
         print("[Drive] Salvando índice no Google Drive...")
         try:

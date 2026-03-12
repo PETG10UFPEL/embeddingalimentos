@@ -9,10 +9,8 @@ import streamlit.components.v1 as components
 
 # Streamlit Cloud: carrega secrets se disponíveis
 try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
-    if "GEMINI_MODEL" in st.secrets:
-        os.environ["GEMINI_MODEL"] = st.secrets["GEMINI_MODEL"]
+    if "GROQ_API_KEY" in st.secrets:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
     if "GDRIVE_FOLDER_ID" in st.secrets:
         os.environ["GDRIVE_FOLDER_ID"] = st.secrets["GDRIVE_FOLDER_ID"]
 except Exception:
@@ -22,8 +20,10 @@ from drive_sync import sync_folder, download_index_from_drive, upload_index_to_d
 from ingest import build_index
 from rag import answer
 
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
+
+EMBED_MODEL = "paraphrase-multilingual-mpnet-base-v2"
 
 DB_DIR          = "data/chroma_db"
 COLLECTION_NAME = "diet_knowledge"
@@ -116,12 +116,11 @@ def load_vectordb_from_disk():
 
     if not Path(DB_DIR).exists():
         return None
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        return None
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
-        google_api_key=api_key,
+    # Embeddings locais — multilíngue PT/EN/ES e +50 línguas, sem API key
+    embeddings = HuggingFaceEmbeddings(
+        model_name=EMBED_MODEL,
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
     )
     return Chroma(
         persist_directory=DB_DIR,
@@ -430,5 +429,3 @@ if gerar:
                     st.write(f"- {src} | {page}")
             else:
                 st.info("Nenhuma fonte indexada utilizada — resposta baseada em conhecimento geral.")
-
-# teste de atualiza��o
