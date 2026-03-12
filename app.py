@@ -389,7 +389,7 @@ mic_component("Pergunta / objetivo", 1)
 q = st.text_area(
     "Pergunta / objetivo",
     height=100,
-    placeholder="Ex.: Quais são as fases da cicatrização? Como classificar uma úlcera por pressão? Qual o curativo indicado para ferida com exsudato abundante?",
+    placeholder="Ex.: sugerir plano alimentar de 7 dias, calcular necessidades calóricas, ajustar dieta para diabetes tipo 2, etc.",
     label_visibility="collapsed",
 )
 
