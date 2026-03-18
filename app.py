@@ -131,14 +131,10 @@ def load_vectordb_from_disk():
 # ==============================
 # Banner — 40% da largura, centralizado
 # ==============================
-banner_b64 = img_b64("banner.png")
-if banner_b64:
-    st.markdown(f"""
-    <div style="display:flex; justify-content:center; margin-bottom:8px;">
-      <img src="data:image/png;base64,{banner_b64}"
-           style="width:40%; height:auto; border-radius:6px;">
-    </div>
-    """, unsafe_allow_html=True)
+banner_path = BASE_DIR / "assets" / "banner.png"
+if banner_path.exists():
+    # O use_container_width=True faz a imagem expandir lindamente no layout
+    st.image(str(banner_path), use_container_width=True)
 else:
     st.title("🩹 Feridas Crônicas - PET G10 UFPel")
 
