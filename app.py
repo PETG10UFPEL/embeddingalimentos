@@ -131,6 +131,7 @@ def load_vectordb_from_disk():
 # ==============================
 # Banner — 40% da largura, centralizado
 # ==============================
+BASE_DIR = Path(__file__).parent
 banner_path = BASE_DIR / "assets" / "banner.png"
 if banner_path.exists():
     # O use_container_width=True faz a imagem expandir lindamente no layout
